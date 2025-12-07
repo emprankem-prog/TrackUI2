@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}TrackUI{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" type="image/x-icon"
+        href="data:image/x-icon;base64,AAABAAEAEBAQAAEABAAoAQAAFgAAACgAAAAQAAAAIAAAAAEABAAAAAAAgAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAA">
+</head>
+
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="header-content">
+                <div class="header-left">
+                    <h1 class="app-title">
+                        <a href="{{ url_for('index') }}">
+                            📱 TrackUI
+                        </a>
+                    </h1>
+                    <nav class="header-nav">
+                        {% if request.endpoint == 'index' %}
+                        <a href="{{ url_for('feed') }}" class="nav-link">
+                            <span class="nav-icon">📱</span> Feed
+                        </a>
+                        {% elif request.endpoint != 'feed' %}
+                        <div class="breadcrumb">
+                            <a href="{{ url_for('index') }}">Home</a>
+                            {% block breadcrumb %}{% endblock %}
+                        </div>
+                        {% endif %}
+                    </nav>
+                </div>
+
+                {% if request.endpoint == 'index' %}
+                <div class="header-right">
+                    <div class="download-controls">
+                        <div class="download-indicator" id="downloadIndicator" style="display: none;">
+                            <div class="download-progress-mini">
+                                <div class="progress-bar-mini">
+                                    <div class="progress-fill-mini" id="globalProgressFill" style="width: 0%"></div>
+                                </div>
+                                <span class="download-count" id="downloadCount">0</span>
+                            </div>
+                        </div>
+                        <button class="btn btn-secondary" id="downloadsBtn" onclick="showDownloadsModal()">
+                            <span class="btn-icon">📥</span>
+                            Downloads
+                            <span class="download-badge" id="downloadBadge" style="display: none;">0</span>
+                        </button>
+                    </div>
+                    <div class="sync-controls">
+                        <div class="sync-status" id="syncStatus">
+                            <span class="status-indicator" id="statusIndicator"></span>
+                            <span class="status-text" id="statusText">Ready</span>
+                        </div>
+                        <div class="btn-group" id="syncAllGroup"
+                            style="display:inline-flex; gap:6px; align-items:center;">
+                            <button class="btn btn-primary" id="syncAllBtn" onclick="syncAllUsers()">
+                                <span class="btn-icon">🔄</span>
+                                Sync All
+                            </button>
+                            <button class="btn btn-primary" id="syncAllOptionsBtn" onclick="toggleSyncOptions(event)"
+                                title="Sync options">
+                                ▾
+                            </button>
+                        </div>
+                        <!-- Sync options menu -->
+                        <div class="context-menu" id="syncOptionsMenu" style="display:none;">
+                            <div class="context-menu-item">
+                                <label class="toggle-switch small" title="Skip items already downloaded">
+                                    <input type="checkbox" id="skipExistingToggleMenu"
+                                        onchange="toggleSkipExisting(this)">
+                                    <span class="toggle-slider"></span>
+                                    <span class="toggle-label">Skip Existing</span>
+                                </label>
+                            </div>
+                            <div class="context-menu-separator"></div>
+                            <div class="context-menu-item" onclick="showScheduleModal(); hideSyncOptions();">
+                                <span class="menu-icon">⏰</span>
+                                Schedule…
+                            </div>
+                        </div>
+
+                        <button class="btn btn-secondary" id="testAccessBtn" onclick="testAccess()">
+                            <span class="btn-icon">🔗</span>
+                            Test Access
+                        </button>
+                        <button class="btn btn-secondary" id="refreshAvatarsBtn" onclick="refreshAllAvatars()">
+                            <span class="btn-icon">👤</span>
+                            Refresh Avatars
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
+                <button class="btn btn-secondary" id="settingsBtn" onclick="openSettingsSidebar()"
+                    title="Settings"><span class="btn-icon">⚙️</span></button>
+            </div>
+        </header>
+
+        <!-- Settings Sidebar -->
+        <div id="settingsSidebar" class="modal-overlay" style="align-items: stretch;">
+            <div class="modal"
+                style="min-width: 420px; max-width: 480px; margin-left: auto; height: 100vh; display: flex; flex-direction: column;">
+                <div class="modal-header">
+                    <h3 class="modal-title">Settings</h3>
+                    <button class="modal-close" onclick="closeSettingsSidebar()">×</button>
+                </div>
+                <div class="modal-body" style="flex: 1; overflow-y: auto;">
+                    <div class="form-group">
+                        <label>External Downloads</label>
+                        <button class="btn btn-primary" onclick="showExternalDownloadModal()">
+                            <span class="btn-icon">📥</span>
+                            Download from URL
+                        </button>
+                    </div>
+                    <div class="form-group">
+                        <label>Instagram Cookies</label>
+                        <button class="btn btn-secondary" onclick="openCookiesModal()">Manage Instagram Cookies</button>
+                        <small class="form-help">Used for private or authenticated downloads on Instagram.</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Database Management</label>
+                        <div class="btn-group-vertical" style="display: flex; flex-direction: column; gap: 8px;">
+                            <button class="btn btn-secondary" onclick="exportDatabase()">
+                                <span class="btn-icon">📤</span> Export Users & Cookies
+                            </button>
+                            <button class="btn btn-secondary" onclick="triggerImportDatabase()">
+                                <span class="btn-icon">📥</span> Import Users & Cookies
+                            </button>
+                            <input type="file" id="importDatabaseFile" accept=".zip" style="display: none;"
+                                onchange="importDatabase(this)">
+                        </div>
+                        <small class="form-help">Backup or restore your tracked users and cookie files.</small>
+                    </div>
+
+                    <div class="form-group"
+                        style="margin-top: auto; padding-top: var(--spacing-md); border-top: 1px solid var(--border-color);">
+                        <label style="color: var(--accent-danger);">Danger Zone</label>
+                        <button class="btn btn-danger" onclick="showResetModal()" style="width: 100%;">
+                            <span class="btn-icon">⚠️</span> Factory Reset App
+                        </button>
+                        <small class="form-help">Completely wipe all data and start fresh.</small>
+                    </div>
+                </div>
+                <div class="modal-footer"
+                    style="padding-top: var(--spacing-md); border-top: 1px solid var(--border-color);">
+                    <button class="btn btn-secondary" onclick="closeSettingsSidebar()">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reset Confirmation Modal -->
+        <div class="modal-overlay" id="resetConfirmationModal">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3 class="modal-title" style="color: var(--accent-danger);">⚠️ Factory Reset</h3>
+                    <button class="modal-close" onclick="closeResetModal()">×</button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to completely reset the application?</p>
+                    <div class="alert alert-danger"
+                        style="background: rgba(220, 53, 69, 0.1); padding: 15px; border-radius: 8px; border: 1px solid var(--accent-danger); margin: 15px 0;">
+                        <strong>This action cannot be undone!</strong><br>
+                        It will delete:
+                        <ul style="margin-left: 20px; margin-top: 5px;">
+                            <li>All tracked users and profiles</li>
+                            <li>All application settings</li>
+                            <li>All tags and categories</li>
+                        </ul>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="deleteDownloadsCheckbox">
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label" style="color: var(--accent-danger);">Also delete all downloaded
+                                files</span>
+                        </label>
+                        <small class="form-help">If checked, all files in the <code>data/downloads</code> folder will be
+                            permanently deleted.</small>
+                    </div>
+
+                    <p>Type <strong>RESET</strong> below to confirm:</p>
+                    <input type="text" id="resetConfirmationInput" placeholder="RESET"
+                        style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary);">
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeResetModal()">Cancel</button>
+                    <button class="btn btn-danger" onclick="confirmFactoryReset()" id="confirmResetBtn" disabled>
+                        Confirm Factory Reset
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- External Download Modal -->
+        <div class="modal-overlay" id="externalDownloadModal">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3 class="modal-title">External Download</h3>
+                    <button class="modal-close" onclick="closeExternalDownloadModal()">×</button>
+                </div>
+                <div class="modal-body">
+                    <form id="externalDownloadForm" onsubmit="startExternalDownload(event)">
+                        <div class="form-group">
+                            <label for="externalUrl">URL</label>
+                            <input type="url" id="externalUrl" name="url"
+                                placeholder="https://drive.google.com/... or https://gofile.io/... or https://imgur.com/..."
+                                required>
+                            <small class="form-help">Supports Google Drive, GoFile, Bunkr, Imgur, Catbox,
+                                RedGifs, and
+                                other compatible services</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="externalDestination">Destination Folder (Optional)</label>
+                            <input type="text" id="externalDestination" name="destination" placeholder="my-download"
+                                maxlength="50">
+                            <small class="form-help">Custom folder name. If empty, a timestamp-based folder will
+                                be
+                                created</small>
+                        </div>
+                        <div class="external-service-info">
+                            <h4>Supported Services</h4>
+                            <div class="service-list">
+                                <div class="service-item">
+                                    <span class="service-icon">🚗</span>
+                                    <span class="service-name">Google Drive</span>
+                                    <small>Files and folders (via gdown)</small>
+                                </div>
+                                <div class="service-item">
+                                    <span class="service-icon">📁</span>
+                                    <span class="service-name">GoFile</span>
+                                    <small>File sharing service</small>
+                                </div>
+                                <div class="service-item">
+                                    <span class="service-icon">🗄️</span>
+                                    <span class="service-name">Bunkr</span>
+                                    <small>Media hosting service</small>
+                                </div>
+                                <div class="service-item">
+                                    <span class="service-icon">🖼️</span>
+                                    <span class="service-name">Imgur</span>
+                                    <small>Image hosting and galleries</small>
+                                </div>
+                                <div class="service-item">
+                                    <span class="service-icon">📦</span>
+                                    <span class="service-name">Catbox</span>
+                                    <small>File hosting service</small>
+                                </div>
+                                <div class="service-item">
+                                    <span class="service-icon">🎬</span>
+                                    <span class="service-name">RedGifs</span>
+                                    <small>GIF hosting service</small>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeExternalDownloadModal()">Cancel</button>
+                    <button class="btn btn-primary"
+                        onclick="document.getElementById('externalDownloadForm').dispatchEvent(new Event('submit'))">
+                        <span class="btn-icon">📥</span>
+                        Start Download
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Instagram Cookies Modal -->
+        <div class="modal-overlay" id="cookiesModal">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3 class="modal-title">Manage Instagram Cookies</h3>
+                    <button class="modal-close" onclick="closeCookiesModal()">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Upload cookies.txt</label>
+                        <input type="file" id="cookiesFile" accept=".txt">
+                        <button class="btn btn-primary" onclick="uploadCookiesFile()">Upload</button>
+                    </div>
+                    <div class="form-group">
+                        <label>Available cookie files</label>
+                        <div id="cookiesList">Loading...</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeCookiesModal()">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <main class="app-main">
+            {% with messages = get_flashed_messages() %}
+            {% if messages %}
+            <div class="flash-messages">
+                {% for message in messages %}
+                <div class="flash-message flash-info">{{ message }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% endwith %}
+
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Modal Container -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal" id="modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modalTitle">Modal Title</h3>
+                <button class="modal-close" onclick="closeModal()">×</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                Modal content goes here
+            </div>
+            <div class="modal-footer" id="modalFooter">
+                <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add User Modal -->
+    <div class="modal-overlay" id="addUserModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Track New User</h3>
+                <button class="modal-close" onclick="closeAddUserModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="addUserForm" onsubmit="addUser(event)">
+                    <div class="form-group">
+                        <label for="platformSelect">Platform</label>
+                        <select id="platformSelect">
+                            <option value="tiktok">TikTok</option>
+                            <option value="instagram">Instagram</option>
+                            <option value="coomer">Coomer</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" name="username" placeholder="Enter username (without @)"
+                            required>
+                        <small class="form-help">Enter the username without the @ symbol</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeAddUserModal()">Cancel</button>
+                <button class="btn btn-primary"
+                    onclick="document.getElementById('addUserForm').dispatchEvent(new Event('submit'))">
+                    Add User
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tag Manager Modal -->
+    <div class="modal-overlay" id="tagManagerModal">
+        <div class="modal modal-large">
+            <div class="modal-header">
+                <h3 class="modal-title">Manage Tags</h3>
+                <button class="modal-close" onclick="closeTagManagerModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="tag-manager">
+                    <div class="tag-create">
+                        <h4>Create New Tag</h4>
+                        <form id="createTagForm" onsubmit="createTag(event)">
+                            <div class="form-row">
+                                <div class="form-group flex-1">
+                                    <input type="text" id="tagName" placeholder="Tag name" required>
+                                </div>
+                                <div class="form-group">
+                                    <input type="color" id="tagColor" value="#007bff">
+                                </div>
+                                <div class="form-group">
+                                    <button type="submit" class="btn btn-primary">Create</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="tag-list" id="tagList">
+                        <h4>Existing Tags</h4>
+                        <div id="tagListContent">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Progress Modal -->
+    <div class="modal-overlay" id="progressModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="progressTitle">Download Progress</h3>
+                <button class="modal-close" onclick="closeProgressModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="progress-info">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-text" id="progressText">Preparing download...</div>
+                    <div class="progress-details" id="progressDetails">
+                        <div class="detail-item">
+                            <span>Files Downloaded:</span>
+                            <span id="filesDownloaded">0</span>
+                        </div>
+                        <div class="detail-item">
+                            <span>Current File:</span>
+                            <span id="currentFile">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span>Status:</span>
+                            <span id="downloadStatus">Starting</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="progress-logs" id="progressLogs">
+                    <h5>Download Logs</h5>
+                    <div class="log-container" id="logContainer"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeProgressModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Tag Assignment Modal -->
+    <div class="modal-overlay" id="userTagModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="userTagModalTitle">Assign Tags to User</h3>
+                <button class="modal-close" onclick="closeUserTagModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="userTagModalContent">
+                    <p>Loading tags...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeUserTagModal()">Close</button>
+                <button class="btn btn-primary" onclick="saveUserTags()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Schedule Modal -->
+    <div class="modal-overlay" id="scheduleModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Schedule Sync & Download</h3>
+                <button class="modal-close" onclick="closeScheduleModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="scheduleEnabled">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">Enable Schedule</span>
+                    </label>
+                </div>
+
+                <h4
+                    style="margin: 15px 0 10px; font-size: 0.9em; text-transform: uppercase; color: var(--text-secondary);">
+                    Content to Sync</h4>
+                <div class="form-row" style="flex-wrap: wrap; gap: 15px; margin-bottom: 20px;">
+                    <label class="toggle-switch" style="font-size: 0.9em;">
+                        <input type="checkbox" id="syncPosts" checked>
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">Posts (All Platforms)</span>
+                    </label>
+                    <label class="toggle-switch" style="font-size: 0.9em;">
+                        <input type="checkbox" id="syncStories" checked>
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">Stories (Insta)</span>
+                    </label>
+                    <label class="toggle-switch" style="font-size: 0.9em;">
+                        <input type="checkbox" id="syncHighlights" checked>
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">Highlights (Insta)</span>
+                    </label>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="scheduleFrequency">Frequency</label>
+                        <select id="scheduleFrequency">
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="scheduleTime">Time (24h)</label>
+                        <input type="time" id="scheduleTime" value="03:00">
+                    </div>
+                    <div class="form-group" id="scheduleDayContainer">
+                        <label for="scheduleDay">Day (for Weekly)</label>
+                        <select id="scheduleDay">
+                            <option value="0">Monday</option>
+                            <option value="1">Tuesday</option>
+                            <option value="2">Wednesday</option>
+                            <option value="3">Thursday</option>
+                            <option value="4">Friday</option>
+                            <option value="5">Saturday</option>
+                            <option value="6">Sunday</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="downloadTimeout">Per-user download timeout (seconds)</label>
+                        <input type="number" id="downloadTimeout" min="60" step="30" placeholder="600">
+                        <small class="form-help">Failsafe to avoid stalls; default 600s</small>
+                    </div>
+                </div>
+                <small id="lastRunInfo" class="form-help"></small>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="showSchedulerLogsModal()">
+                    <span class="btn-icon">📋</span>
+                    View Logs
+                </button>
+                <button class="btn btn-secondary" onclick="closeScheduleModal()">Cancel</button>
+                <button class="btn btn-secondary" onclick="runSyncNow()">Run now</button>
+                <button class="btn btn-primary" onclick="saveSchedule()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scheduler Logs Modal -->
+    <div class="modal-overlay" id="schedulerLogsModal">
+        <div class="modal modal-large">
+            <div class="modal-header">
+                <h3 class="modal-title">Scheduler Logs</h3>
+                <button class="modal-close" onclick="closeSchedulerLogsModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="scheduler-status-info" id="schedulerStatusInfo">
+                    <div class="status-grid">
+                        <div class="status-item">
+                            <span class="status-label">Status:</span>
+                            <span class="status-value" id="schedulerStatus">Loading...</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Frequency:</span>
+                            <span class="status-value" id="schedulerFrequency">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Scheduled Time:</span>
+                            <span class="status-value" id="schedulerTime">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Last Run:</span>
+                            <span class="status-value" id="schedulerLastRun">Never</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Next Run:</span>
+                            <span class="status-value" id="schedulerNextRun">-</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="scheduler-logs-container">
+                    <h4>Recent Logs</h4>
+                    <div class="logs-list" id="schedulerLogsList">
+                        <div class="loading-state">Loading logs...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeSchedulerLogsModal()">Close</button>
+                <button class="btn btn-primary" onclick="refreshSchedulerLogs()">
+                    <span class="btn-icon">🔄</span>
+                    Refresh
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Downloads Modal -->
+    <div class="modal-overlay" id="downloadsModal">
+        <div class="modal modal-large">
+            <div class="modal-header">
+                <h3 class="modal-title">Download Manager</h3>
+                <button class="modal-close" onclick="closeDownloadsModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="downloads-header">
+                    <div class="downloads-stats" id="downloadsStats">
+                        <div class="stat-item">
+                            <span class="stat-label">Total:</span>
+                            <span class="stat-value" id="totalDownloads">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Active:</span>
+                            <span class="stat-value" id="activeDownloads">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Completed:</span>
+                            <span class="stat-value" id="completedDownloads">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Failed:</span>
+                            <span class="stat-value" id="failedDownloads">0</span>
+                        </div>
+                    </div>
+                    <div class="downloads-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="clearCompletedDownloads()">
+                            <span class="btn-icon">🗑️</span>
+                            Clear Completed
+                        </button>
+                    </div>
+                </div>
+                <div class="downloads-list" id="downloadsList">
+                    <div class="loading-state">Loading downloads...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeDownloadsModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Instagram Following Modal -->
+    <div class="modal-overlay" id="instagramFollowingModal">
+        <div class="modal modal-large">
+            <div class="modal-header">
+                <h3 class="modal-title">Instagram Following</h3>
+                <button class="modal-close" onclick="closeInstagramFollowingModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="instagram-following-steps">
+                    <!-- Step 1: Cookie Upload -->
+                    <div class="step-section" id="step1">
+                        <h4>Step 1: Upload Instagram Cookies</h4>
+                        <p class="step-description">Upload your Instagram cookies.txt
+                            file to
+                            access your
+                            following
+                            list. The cookies are used to fetch the list of accounts
+                            you're
+                            following.</p>
+                        <div class="cookie-upload">
+                            <input type="file" id="instagramCookieFile" accept=".txt" style="display: none;">
+                            <button class="btn btn-primary"
+                                onclick="document.getElementById('instagramCookieFile').click()">
+                                <span class="btn-icon">📁</span>
+                                Choose Cookie File
+                            </button>
+                            <span id="cookieFileName" class="file-name"></span>
+                            <button class="btn btn-success" id="uploadCookieBtn" onclick="uploadInstagramCookie()"
+                                style="display: none;">
+                                <span class="btn-icon">⬆️</span>
+                                Upload
+                            </button>
+                            <button class="btn btn-secondary" id="debugCookieBtn" onclick="debugInstagramCookie()"
+                                style="display: none;">
+                                <span class="btn-icon">🔍</span>
+                                Analyze File
+                            </button>
+                        </div>
+                        <div class="cookie-help">
+                            <h5>How to get Instagram cookies:</h5>
+                            <ol>
+                                <li>Install a browser extension like "Get cookies.txt
+                                    LOCALLY"
+                                    or
+                                    "cookies.txt"
+                                </li>
+                                <li>Go to <a href="https://instagram.com" target="_blank">Instagram.com</a>
+                                    and
+                                    log in
+                                </li>
+                                <li>Use the extension to download cookies as a .txt file
+                                </li>
+                                <li>Upload that file here</li>
+                            </ol>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Fetch Following List -->
+                    <div class="step-section" id="step2" style="display: none;">
+                        <h4>Step 2: Fetch Following List</h4>
+                        <p class="step-description">Use the uploaded cookies to fetch
+                            your
+                            Instagram
+                            following
+                            list.</p>
+                        <button class="btn btn-primary" id="fetchFollowingBtn" onclick="fetchInstagramFollowing()">
+                            <span class="btn-icon">🔄</span>
+                            Fetch Following List
+                        </button>
+                        <button class="btn btn-secondary" id="testAccessBtn" onclick="testInstagramAccess()">
+                            <span class="btn-icon">🔍</span>
+                            Test Access
+                        </button>
+                        <div class="fetch-status" id="fetchStatus"></div>
+                    </div>
+
+                    <!-- Step 3: Select Profiles -->
+                    <div class="step-section" id="step3" style="display: none;">
+                        <h4>Step 3: Select Profiles to Track</h4>
+                        <p class="step-description">Choose which profiles from your
+                            following
+                            list to add to
+                            TrackUI for
+                            tracking.</p>
+                        <div class="following-controls">
+                            <div class="selection-controls">
+                                <button class="btn btn-sm btn-secondary" onclick="selectAllFollowing()">
+                                    <span class="btn-icon">☑️</span>
+                                    Select All
+                                </button>
+                                <button class="btn btn-sm btn-secondary" onclick="deselectAllFollowing()">
+                                    <span class="btn-icon">☐</span>
+                                    Deselect All
+                                </button>
+                                <span class="selected-count" id="selectedCount">0
+                                    selected</span>
+                            </div>
+                            <div class="search-filter">
+                                <input type="text" id="followingSearch" placeholder="Search profiles..."
+                                    oninput="filterFollowingList()">
+                            </div>
+                        </div>
+                        <div class="following-list" id="followingList">
+                            <!-- Following list will be populated here -->
+                        </div>
+                        <div class="following-actions">
+                            <button class="btn btn-success" id="addSelectedBtn" onclick="addSelectedProfiles()">
+                                <span class="btn-icon">➕</span>
+                                Add Selected Profiles
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeInstagramFollowingModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}?v=2"></script>
+    {% block scripts %}{% endblock %}
+</body>
+
+</html>

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrackUI - First Time Setup</title>
+    <style>
+        :root {
+            --bg-primary: #0f0f12;
+            --bg-secondary: #1a1a1f;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+            --border-color: #2d2d35;
+            --input-bg: #2d2d35;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .setup-container {
+            background-color: var(--bg-secondary);
+            width: 100%;
+            max-width: 500px;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border-color);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            margin: 0 0 10px;
+            font-size: 24px;
+        }
+
+        .header p {
+            color: var(--text-secondary);
+            margin: 0;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 16px;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .btn-primary {
+            background-color: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--accent-hover);
+        }
+
+        .divider {
+            height: 1px;
+            background-color: var(--border-color);
+            margin: 25px 0;
+            position: relative;
+        }
+
+        .divider span {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: var(--bg-secondary);
+            padding: 0 10px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .file-upload {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="setup-container">
+        <div class="header">
+            <h1>Welcome to TrackUI</h1>
+            <p>Configure your Telegram integration to get started.</p>
+        </div>
+
+        <form id="setupForm" onsubmit="submitSetup(event)">
+            <div class="form-group">
+                <label for="botToken">Telegram Bot Token</label>
+                <input type="text" id="botToken" class="form-control"
+                    placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" required>
+            </div>
+
+            <div class="form-group">
+                <label for="chatId">Telegram Chat ID</label>
+                <input type="text" id="chatId" class="form-control" placeholder="123456789" required>
+            </div>
+
+            <div class="divider">
+                <span>OPTIONAL</span>
+            </div>
+
+            <div class="form-group">
+                <label for="importFile">Import Database (Restore Backup)</label>
+                <input type="file" id="importFile" class="form-control" accept=".zip">
+                <small style="color: var(--text-secondary); display: block; margin-top: 5px;">If you have a previous
+                    backup, upload it here to restore data.</small>
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="submitBtn">Complete Setup</button>
+        </form>
+    </div>
+
+    <script>
+        async function submitSetup(e) {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            const originalText = btn.textContent;
+
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+
+            try {
+                const formData = new FormData();
+                formData.append('bot_token', document.getElementById('botToken').value);
+                formData.append('chat_id', document.getElementById('chatId').value);
+
+                const fileInput = document.getElementById('importFile');
+                if (fileInput.files.length > 0) {
+                    formData.append('import_file', fileInput.files[0]);
+                }
+
+                const response = await fetch('/api/complete_setup', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    window.location.href = '/';
+                } else {
+                    alert('Setup failed: ' + data.error);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
+    </script>
+</body>
+
+</html>

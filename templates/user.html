@@ -1,0 +1,1364 @@
+{% extends "layout.html" %}
+
+{% block title %}@{{ user.username }} - {{ platform|title }} Tracker{% endblock %}
+
+{% block breadcrumb %}
+<span class="breadcrumb-separator">→</span>
+<span>@{{ user.username }}</span>
+{% endblock %}
+
+{% block content %}
+<div class="user-profile">
+    <style>
+        /* Force containment on fullscreen videos to prevent cropping */
+        video:fullscreen,
+        video:-webkit-full-screen,
+        video:-moz-full-screen {
+            object-fit: contain !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            background: black !important;
+        }
+
+        /* Ensure media previews in grid don't interfere */
+        .media-preview video {
+            object-fit: contain;
+            background: black;
+        }
+    </style>
+    <!-- User Header -->
+    <div class="user-header">
+        <div class="user-header-content">
+            <div class="user-avatar-large">
+                {% if avatar_url %}
+                <img src="{{ avatar_url }}" alt="{{ user.display_name or user.username }}">
+                {% else %}
+                <div class="avatar-placeholder">{{ (user.display_name or user.username)[0]|upper }}</div>
+                {% endif %}
+            </div>
+
+            <div class="user-details">
+                <h1 class="user-display-name">{{ user.display_name or user.username }}</h1>
+                <p class="user-handle">@{{ user.username }}</p>
+
+                <div class="user-stats-row">
+                    <div class="stat-box">
+                        <div class="stat-number">{{ user.follower_count if user.follower_count and user.follower_count >
+                            0 else '—' }}</div>
+                        <div class="stat-label">Followers</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-number">{{ media_counts.videos }}</div>
+                        <div class="stat-label">Videos</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-number">{{ media_counts.total }}</div>
+                        <div class="stat-label">Downloaded</div>
+                    </div>
+                </div>
+
+                <!-- User Tags -->
+                {% if user_tags %}
+                <div class="user-tags-section">
+                    <h4>Tags:</h4>
+                    <div class="user-tags">
+                        {% for tag in user_tags %}
+                        <span class="tag" style="background-color: {{ tag.color }}">{{ tag.name }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Status Info -->
+                <div class="status-info">
+                    <div class="status-item">
+                        <span class="status-label">Tracking:</span>
+                        <span class="status-value {{ 'active' if user.is_tracking else 'inactive' }}">
+                            {{ 'Active' if user.is_tracking else 'Inactive' }}
+                        </span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Last Sync:</span>
+                        <span class="status-value">
+                            {% if user.last_sync %}
+                            {{ user.last_sync|strftime('%Y-%m-%d %H:%M') }}
+                            {% else %}
+                            Never
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="user-actions">
+            <button class="btn btn-secondary" onclick="goBack()">
+                <span class="btn-icon">←</span>
+                Back to Main
+            </button>
+            <button class="btn btn-primary" id="downloadNewBtn"
+                onclick="downloadNewContent('{{ user.username }}', '{{ request.args.get('platform','tiktok') }}')">
+                <span class="btn-icon">⬇️</span>
+                Download New
+            </button>
+            <button class="btn btn-secondary" id="pauseBtn" onclick="pauseDownload('{{ user.username }}')"
+                style="display:none;">
+                Pause
+            </button>
+            <button class="btn btn-primary" id="resumeBtn" onclick="resumeDownload('{{ user.username }}')"
+                style="display:none;">
+                Resume
+            </button>
+            <button class="btn btn-secondary"
+                onclick="downloadZip('{{ user.username }}', '{{ request.args.get('platform','tiktok') }}')">
+                <span class="btn-icon">📦</span>
+                Download ZIP
+            </button>
+            <button class="btn btn-secondary" onclick="testAccess()">
+                <span class="btn-icon">🔗</span>
+                Test Access
+            </button>
+            <button class="btn btn-secondary" onclick="showUserTagModal('{{ user.username }}')">
+                <span class="btn-icon">🏷️</span>
+                Manage Tags
+            </button>
+
+            <!-- Instagram-specific buttons -->
+            {% if platform == 'instagram' %}
+            <button class="btn btn-secondary" onclick="downloadInstagramStories('{{ user.username }}')">
+                <span class="btn-icon">📖</span>
+                Download Stories
+            </button>
+            <button class="btn btn-secondary" onclick="testInstagramStories('{{ user.username }}')">
+                <span class="btn-icon">🔍</span>
+                Test Stories
+            </button>
+            <button class="btn btn-secondary" onclick="downloadInstagramHighlights('{{ user.username }}')">
+                <span class="btn-icon">⭐</span>
+                Download Highlights
+            </button>
+            <button class="btn btn-secondary" onclick="testInstagramHighlights('{{ user.username }}')">
+                <span class="btn-icon">🔍</span>
+                Test Highlights
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Instagram Stories/Highlights Navigation -->
+    {% if platform == 'instagram' %}
+    <div class="instagram-nav-section">
+        <div class="instagram-nav-buttons">
+            <button class="instagram-nav-btn active" id="postsNavBtn" onclick="showInstagramSection('posts')">
+                <div class="nav-btn-content">
+                    <span class="nav-icon">📹</span>
+                    <span class="nav-label">Posts</span>
+                    <span class="nav-count">{{ media_counts.total }}</span>
+                </div>
+            </button>
+
+            <button class="instagram-nav-btn" id="storiesNavBtn" onclick="showInstagramSection('stories')">
+                <div class="nav-btn-content">
+                    <span class="nav-icon">📖</span>
+                    <span class="nav-label">Stories</span>
+                    <span class="nav-count">{{ media_counts.stories }}</span>
+                </div>
+            </button>
+
+            <button class="instagram-nav-btn" id="highlightsNavBtn" onclick="showInstagramSection('highlights')">
+                <div class="nav-btn-content">
+                    <span class="nav-icon">⭐</span>
+                    <span class="nav-label">Highlights</span>
+                    <span class="nav-count">{{ media_counts.highlights }}</span>
+                </div>
+            </button>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Instagram Highlights Section (Profile Page) -->
+    {% if platform == 'instagram' and highlights_grouped %}
+    <div class="profile-highlights-section">
+        <div class="highlights-container">
+            {% for folder_name, files in highlights_grouped %}
+            {% set first_file = files[0] %}
+            <div class="profile-highlight" data-highlight-name="{{ folder_name }}"
+                data-highlight-files='{{ files | tojson | safe }}'>
+                <div class="profile-highlight-circle">
+                    {% if first_file.type == 'video' %}
+                    <video class="profile-highlight-preview" muted>
+                        <source src="{{ url_for('download_file', filename=first_file.path) }}" type="video/mp4">
+                    </video>
+                    {% else %}
+                    <img class="profile-highlight-preview"
+                        src="{{ url_for('download_file', filename=first_file.path) }}" alt="{{ folder_name }}">
+                    {% endif %}
+                    <div class="profile-highlight-ring"></div>
+                </div>
+                <div class="profile-highlight-title">{{ folder_name }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Media Controls -->
+    <div class="media-controls">
+        <div class="media-filters">
+            <button class="filter-btn active" id="allFilter" onclick="filterMedia('all')">
+                All ({{ media_files|length }})
+            </button>
+            <button class="filter-btn" id="videoFilter" onclick="filterMedia('video')">
+                Videos ({{ media_files|selectattr('type', 'equalto', 'video')|list|length }})
+            </button>
+            <button class="filter-btn" id="imageFilter" onclick="filterMedia('image')">
+                Images ({{ media_files|selectattr('type', 'equalto', 'image')|list|length }})
+            </button>
+        </div>
+
+        <div class="sort-controls">
+            <label for="sortSelect">Sort by:</label>
+            <select id="sortSelect" onchange="sortMedia()">
+                <option value="date-desc">Newest First</option>
+                <option value="date-asc">Oldest First</option>
+                <option value="name-asc">Name A-Z</option>
+                <option value="name-desc">Name Z-A</option>
+                <option value="size-desc">Largest First</option>
+                <option value="size-asc">Smallest First</option>
+            </select>
+        </div>
+
+        <div class="view-options">
+            <button class="view-btn active" id="gridViewBtn" onclick="toggleMediaView('grid')">
+                <span class="btn-icon">▦</span>
+            </button>
+            <button class="view-btn" id="listViewBtn" onclick="toggleMediaView('list')">
+                <span class="btn-icon">☰</span>
+            </button>
+            <button class="view-btn" id="tiktokViewBtn" onclick="toggleMediaView('tiktok')">
+                <span class="btn-icon">📱</span>
+            </button>
+        </div>
+
+        <div class="tiktok-toggle">
+            <label class="tiktok-switch">
+                <input type="checkbox" id="tiktokModeToggle" onchange="toggleTikTokMode()">
+                <span class="tiktok-slider"></span>
+                <span class="tiktok-label">TikTok Mode</span>
+            </label>
+        </div>
+    </div>
+
+    <!-- Media Gallery -->
+    {% if media_files %}
+    <div class="media-gallery" id="mediaGallery">
+        {% for file in media_files %}
+        <div class="media-item" data-type="{{ file.type }}" data-name="{{ file.filename }}" data-size="{{ file.size }}"
+            data-date="{{ file.modified.timestamp() }}">
+
+            <div class="media-preview">
+                {% if file.type == 'video' %}
+                <video controls preload="metadata" playsinline webkit-playsinline muted>
+                    <source src="{{ url_for('download_file', filename=file.path) }}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+                <div class="media-type-indicator">
+                    <span class="type-icon">🎥</span>
+                </div>
+                {% else %}
+                <img src="{{ url_for('download_file', filename=file.path) }}" alt="{{ file.filename }}" loading="lazy"
+                    onclick="openLightbox('{{ url_for('download_file', filename=file.path) }}', '{{ file.filename }}')">
+                <div class="media-type-indicator">
+                    <span class="type-icon">🖼️</span>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="media-info">
+                <div class="media-filename" title="{{ file.filename }}">
+                    {{ file.filename[:30] + '...' if file.filename|length > 30 else file.filename }}
+                </div>
+                <div class="media-details">
+                    <span class="file-size">{{ "%.1f"|format(file.size / 1024 / 1024) }} MB</span>
+                    <span class="file-date">{{ file.modified.strftime('%m/%d/%Y') }}</span>
+                </div>
+            </div>
+
+            <div class="media-actions">
+                <button class="action-btn" onclick="downloadFile('{{ file.path }}', '{{ file.filename }}')"
+                    title="Download">
+                    <span class="btn-icon">⬇️</span>
+                </button>
+                <button class="action-btn"
+                    onclick="showFileInfo('{{ file.filename }}', {{ file.size }}, '{{ file.modified.isoformat() }}')"
+                    title="Info">
+                    <span class="btn-icon">ℹ️</span>
+                </button>
+                {% if file.type == 'image' %}
+                <button class="action-btn"
+                    onclick="openLightbox('{{ url_for('download_file', filename=file.path) }}', '{{ file.filename }}')"
+                    title="View Full Size">
+                    <span class="btn-icon">🔍</span>
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-media-state">
+        <div class="empty-state-content">
+            <div class="empty-state-icon">📁</div>
+            <h3>No Content Downloaded Yet</h3>
+            <p>Download content from @{{ user.username }}'s {{ platform|title }} profile to see it here.</p>
+            <button class="btn btn-primary" onclick="downloadNewContent('{{ user.username }}', '{{ platform }}')">
+                <span class="btn-icon">⬇️</span>
+                Start Download
+            </button>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Instagram Stories Gallery -->
+    {% if platform == 'instagram' %}
+    <div class="instagram-section" id="storiesSection" style="display: none;">
+        {% if stories_files %}
+        <div class="media-gallery" id="storiesGallery">
+            {% for file in stories_files %}
+            <div class="media-item" data-type="{{ file.type }}" data-name="{{ file.filename }}"
+                data-size="{{ file.size }}" data-date="{{ file.modified.timestamp() }}">
+
+                <div class="media-preview">
+                    {% if file.type == 'video' %}
+                    <video controls preload="metadata" playsinline webkit-playsinline muted>
+                        <source src="{{ url_for('download_file', filename=file.path) }}" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                    <div class="media-type-indicator">
+                        <span class="type-icon">📖</span>
+                    </div>
+                    {% else %}
+                    <img src="{{ url_for('download_file', filename=file.path) }}" alt="{{ file.filename }}"
+                        loading="lazy"
+                        onclick="openLightbox('{{ url_for('download_file', filename=file.path) }}', '{{ file.filename }}')">
+                    <div class="media-type-indicator">
+                        <span class="type-icon">📖</span>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="media-info">
+                    <div class="media-filename" title="{{ file.filename }}">
+                        {{ file.filename[:30] + '...' if file.filename|length > 30 else file.filename }}
+                    </div>
+                    <div class="media-details">
+                        <span class="file-size">{{ "%.1f"|format(file.size / 1024 / 1024) }} MB</span>
+                        <span class="file-date">{{ file.modified.strftime('%m/%d/%Y') }}</span>
+                    </div>
+                </div>
+
+                <div class="media-actions">
+                    <button class="action-btn" onclick="downloadFile('{{ file.path }}', '{{ file.filename }}')"
+                        title="Download">
+                        <span class="btn-icon">⬇️</span>
+                    </button>
+                    <button class="action-btn"
+                        onclick="showFileInfo('{{ file.filename }}', {{ file.size }}, '{{ file.modified.isoformat() }}')"
+                        title="Info">
+                        <span class="btn-icon">ℹ️</span>
+                    </button>
+                    {% if file.type == 'image' %}
+                    <button class="action-btn"
+                        onclick="openLightbox('{{ url_for('download_file', filename=file.path) }}', '{{ file.filename }}')"
+                        title="View Full Size">
+                        <span class="btn-icon">🔍</span>
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-media-state">
+            <div class="empty-state-content">
+                <div class="empty-state-icon">📖</div>
+                <h3>No Stories Downloaded Yet</h3>
+                <p>Download stories from @{{ user.username }}'s Instagram profile to see them here.</p>
+                <button class="btn btn-primary" onclick="downloadInstagramStories('{{ user.username }}')">
+                    <span class="btn-icon">⬇️</span>
+                    Download Stories
+                </button>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Instagram Highlights Gallery -->
+    <div class="instagram-section" id="highlightsSection" style="display: none;">
+        {% if highlights_files %}
+        <div class="instagram-highlights-grid">
+            {% for folder_name, files in highlights_grouped %}
+            {% set first_file = files[0] %}
+            <div class="highlight-story" data-highlight-name="{{ folder_name }}"
+                data-highlight-files='{{ files | tojson | safe }}'>
+                <div class="highlight-circle">
+                    {% if first_file.type == 'video' %}
+                    <video class="highlight-preview" muted>
+                        <source src="{{ url_for('download_file', filename=first_file.path) }}" type="video/mp4">
+                    </video>
+                    {% else %}
+                    <img class="highlight-preview" src="{{ url_for('download_file', filename=first_file.path) }}"
+                        alt="{{ folder_name }}">
+                    {% endif %}
+                    <div class="highlight-ring"></div>
+                </div>
+                <div class="highlight-title">{{ folder_name }}</div>
+                <div class="highlight-count">{{ files | length }}</div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- All Highlights Media View (Initially Hidden) -->
+        <div class="highlights-media-view" id="highlightsMediaView" style="display: none;">
+            <div class="highlights-header">
+                <button class="btn btn-secondary" onclick="closeHighlightsMediaView()">
+                    <span class="btn-icon">←</span>
+                    Back to Highlights
+                </button>
+                <h3 id="currentHighlightTitle">All Highlights</h3>
+            </div>
+            <div class="media-gallery" id="highlightsMediaGallery">
+                {% for file in highlights_files %}
+                <div class="media-item" data-type="{{ file.type }}" data-name="{{ file.filename }}"
+                    data-size="{{ file.size }}" data-date="{{ file.modified.timestamp() }}">
+
+                    <div class="media-preview">
+                        {% if file.type == 'video' %}
+                        <video controls preload="metadata" playsinline webkit-playsinline muted>
+                            <source src="{{ url_for('download_file', filename=file.path) }}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                        <div class="media-type-indicator">
+                            <span class="type-icon">⭐</span>
+                        </div>
+                        {% else %}
+                        <img src="{{ url_for('download_file', filename=file.path) }}" alt="{{ file.filename }}"
+                            loading="lazy"
+                            onclick="openLightbox('{{ url_for('download_file', filename=file.path) }}', '{{ file.filename }}')">
+                        <div class="media-type-indicator">
+                            <span class="type-icon">⭐</span>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="media-info">
+                        <div class="media-filename" title="{{ file.filename }}">
+                            {{ file.filename[:30] + '...' if file.filename|length > 30 else file.filename }}
+                        </div>
+                        <div class="media-details">
+                            <span class="file-size">{{ "%.1f"|format(file.size / 1024 / 1024) }} MB</span>
+                            <span class="file-date">{{ file.modified.strftime('%m/%d/%Y') }}</span>
+                        </div>
+                    </div>
+
+                    <div class="media-actions">
+                        <button class="action-btn" onclick="downloadFile('{{ file.path }}', '{{ file.filename }}')"
+                            title="Download">
+                            <span class="btn-icon">⬇️</span>
+                        </button>
+                        <button class="action-btn"
+                            onclick="showFileInfo('{{ file.filename }}', {{ file.size }}, '{{ file.modified.isoformat() }}')"
+                            title="Info">
+                            <span class="btn-icon">ℹ️</span>
+                        </button>
+                        {% if file.type == 'image' %}
+                        <button class="action-btn"
+                            onclick="openLightbox('{{ url_for('download_file', filename=file.path) }}', '{{ file.filename }}')"
+                            title="View Full Size">
+                            <span class="btn-icon">🔍</span>
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- TikTok-Style Media Viewer -->
+    <div class="tiktok-viewer" id="tiktokViewer" style="display: none;">
+        <div class="tiktok-header">
+            <button class="tiktok-close-btn" onclick="closeTikTokMode()">×</button>
+            <div class="tiktok-user-info">
+                <img src="{{ avatar_url or '/static/default-avatar.png' }}" alt="{{ user.username }}"
+                    class="tiktok-avatar">
+                <span class="tiktok-username">@{{ user.username }}</span>
+            </div>
+        </div>
+
+        <div class="tiktok-content-container" id="tiktokContentContainer">
+            <!-- TikTok-style media items will be populated here -->
+        </div>
+
+        <div class="tiktok-controls">
+            <div class="tiktok-nav-controls">
+                <button class="tiktok-nav-btn" id="tiktokPrevBtn" onclick="navigateTikTokMedia('prev')">
+                    <span class="btn-icon">↑</span>
+                </button>
+                <span class="tiktok-counter" id="tiktokCounter">1 / 0</span>
+                <button class="tiktok-nav-btn" id="tiktokNextBtn" onclick="navigateTikTokMedia('next')">
+                    <span class="btn-icon">↓</span>
+                </button>
+            </div>
+
+            <div class="tiktok-action-controls">
+                <button class="tiktok-action-btn" onclick="toggleTikTokAutoplay()">
+                    <span class="btn-icon" id="autoplayIcon">⏸️</span>
+                    <span class="action-label">Auto</span>
+                </button>
+                <button class="tiktok-action-btn" onclick="toggleTikTokMute()">
+                    <span class="btn-icon" id="muteIcon">🔊</span>
+                    <span class="action-label">Sound</span>
+                </button>
+                <button class="tiktok-action-btn" onclick="downloadCurrentTikTokMedia()">
+                    <span class="btn-icon">⬇️</span>
+                    <span class="action-label">Save</span>
+                </button>
+                <button class="tiktok-action-btn" onclick="shareTikTokMedia()">
+                    <span class="btn-icon">📤</span>
+                    <span class="action-label">Share</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lightbox Modal -->
+    <div class="lightbox-overlay" id="lightboxOverlay" onclick="closeLightbox()">
+        <div class="lightbox-content" onclick="event.stopPropagation()">
+            <button class="lightbox-close" onclick="closeLightbox()">×</button>
+            <img id="lightboxImage" src="" alt="">
+            <div class="lightbox-caption" id="lightboxCaption"></div>
+        </div>
+    </div>
+
+    <!-- File Info Modal -->
+    <div class="modal-overlay" id="fileInfoModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">File Information</h3>
+                <button class="modal-close" onclick="closeFileInfoModal()">×</button>
+            </div>
+            <div class="modal-body" id="fileInfoContent">
+                <!-- Content populated by JavaScript -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeFileInfoModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Highlight Story Viewer Modal -->
+    <div class="highlight-story-modal" id="highlightStoryModal" style="display: none;">
+        <div class="highlight-story-header">
+            <button class="highlight-close-btn" onclick="closeHighlightStoryModal()">×</button>
+            <div class="highlight-story-title">
+                <span id="highlightStoryName">Highlight</span>
+            </div>
+            <div class="highlight-story-counter">
+                <span id="highlightStoryCounter">1 / 0</span>
+            </div>
+        </div>
+
+        <div class="highlight-story-content" id="highlightStoryContent">
+            <!-- Story content will be populated here -->
+        </div>
+
+        <div class="highlight-story-controls">
+            <button class="highlight-nav-btn" id="highlightPrevBtn" onclick="navigateHighlightStory('prev')">
+                <span class="btn-icon">←</span>
+            </button>
+            <button class="highlight-nav-btn" id="highlightNextBtn" onclick="navigateHighlightStory('next')">
+                <span class="btn-icon">→</span>
+            </button>
+        </div>
+
+        <div class="highlight-progress-bar">
+            <div class="highlight-progress-fill" id="highlightProgressFill"></div>
+        </div>
+    </div>
+
+    {% endblock %}
+
+    {% block scripts %}
+    <script>
+        // Optional: Filter out third-party extension console errors
+        const originalConsoleError = console.error;
+        console.error = function (...args) {
+            const message = args.join(' ');
+            // Skip bootstrap autofill extension errors
+            if (message.includes('bootstrap-autofill-overlay-notifications')) {
+                return;
+            }
+            originalConsoleError.apply(console, args);
+        };
+
+        let currentMediaFilter = 'all';
+        let currentMediaSort = 'date-desc';
+        let currentMediaView = 'grid';
+        let allMediaItems = [];
+
+        // TikTok mode variables
+        let tikTokMode = false;
+        let tikTokItems = [];
+        let currentTikTokIndex = 0;
+        let tikTokAutoplay = true;
+        let tikTokMuted = false;
+        let tikTokScrolling = false;
+
+        document.addEventListener('DOMContentLoaded', function () {
+            // Initialize media items
+            allMediaItems = Array.from(document.querySelectorAll('.media-item'));
+            console.log('Loaded media items:', allMediaItems.length);
+
+            // Initialize TikTok items
+            tikTokItems = allMediaItems.filter(item => item.dataset.type === 'video');
+
+            // Apply initial sort
+            applyFiltersAndSort();
+
+            // Set up search
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.addEventListener('input', (e) => {
+                    const searchTerm = e.target.value.toLowerCase();
+                    allMediaItems.forEach(item => {
+                        const name = item.dataset.name.toLowerCase();
+                        if (name.includes(searchTerm)) {
+                            item.style.display = 'block';
+                        } else {
+                            item.style.display = 'none';
+                        }
+                    });
+                });
+            }
+        });
+
+        function filterMedia(type) {
+            currentMediaFilter = type;
+
+            // Update buttons
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(type + 'Filter').classList.add('active');
+
+            applyFiltersAndSort();
+        }
+
+        function sortMedia() {
+            currentMediaSort = document.getElementById('sortSelect').value;
+            applyFiltersAndSort();
+        }
+
+        function toggleMediaView(view) {
+            currentMediaView = view;
+
+            // Update buttons
+            document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(view + 'ViewBtn').classList.add('active'); // Fixed ID construction
+
+            const gallery = document.getElementById('mediaGallery');
+            if (gallery) {
+                gallery.className = view === 'list' ? 'media-list' : 'media-gallery';
+            }
+
+            if (view === 'tiktok') {
+                openTikTokMode();
+            }
+        }
+
+        function toggleTikTokMode() {
+            const toggle = document.getElementById('tiktokModeToggle');
+            if (toggle.checked) {
+                openTikTokMode();
+            } else {
+                closeTikTokMode();
+            }
+        }
+
+        function openTikTokMode() {
+            tikTokMode = true;
+            document.getElementById('tiktokViewer').style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+
+            // Reset index
+            currentTikTokIndex = 0;
+            renderTikTokMedia();
+        }
+
+        function closeTikTokMode() {
+            tikTokMode = false;
+            document.getElementById('tiktokViewer').style.display = 'none';
+            document.body.style.overflow = 'auto';
+
+            // Uncheck toggle if it exists
+            const toggle = document.getElementById('tiktokModeToggle');
+            if (toggle) toggle.checked = false;
+
+            // Pause any playing video
+            const video = document.querySelector('#tiktokContentContainer video');
+            if (video) video.pause();
+        }
+
+        function renderTikTokMedia() {
+            if (tikTokItems.length === 0) {
+                document.getElementById('tiktokContentContainer').innerHTML = '<div class="no-content">No videos available</div>';
+                return;
+            }
+
+            const item = tikTokItems[currentTikTokIndex];
+            const videoSrc = item.querySelector('source').src;
+            const filename = item.dataset.name;
+
+            const container = document.getElementById('tiktokContentContainer');
+            container.innerHTML = `
+            <video class="tiktok-video" src="${videoSrc}" ${tikTokAutoplay ? 'autoplay' : ''} ${tikTokMuted ? 'muted' : ''} loop playsinline></video>
+            <div class="tiktok-overlay">
+                <div class="tiktok-info">
+                    <h3>${filename}</h3>
+                </div>
+            </div>
+        `;
+
+            // Update counter
+            document.getElementById('tiktokCounter').textContent = `${currentTikTokIndex + 1} / ${tikTokItems.length}`;
+
+            // Update controls
+            document.getElementById('autoplayIcon').textContent = tikTokAutoplay ? '⏸️' : '▶️';
+            document.getElementById('muteIcon').textContent = tikTokMuted ? '🔇' : '🔊';
+
+            // Add event listeners for swipe/scroll
+            const video = container.querySelector('video');
+            video.addEventListener('ended', () => {
+                if (tikTokAutoplay) navigateTikTokMedia('next');
+            });
+        }
+
+        function navigateTikTokMedia(direction) {
+            if (direction === 'next') {
+                currentTikTokIndex = (currentTikTokIndex + 1) % tikTokItems.length;
+            } else {
+                currentTikTokIndex = (currentTikTokIndex - 1 + tikTokItems.length) % tikTokItems.length;
+            }
+            renderTikTokMedia();
+        }
+
+        function toggleTikTokAutoplay() {
+            tikTokAutoplay = !tikTokAutoplay;
+            const video = document.querySelector('#tiktokContentContainer video');
+            if (video) {
+                if (tikTokAutoplay) video.play();
+                else video.pause();
+            }
+            document.getElementById('autoplayIcon').textContent = tikTokAutoplay ? '⏸️' : '▶️';
+        }
+
+        function toggleTikTokMute() {
+            tikTokMuted = !tikTokMuted;
+            const video = document.querySelector('#tiktokContentContainer video');
+            if (video) {
+                video.muted = tikTokMuted;
+            }
+            document.getElementById('muteIcon').textContent = tikTokMuted ? '🔇' : '🔊';
+        }
+
+        function downloadCurrentTikTokMedia() {
+            if (tikTokItems.length === 0) return;
+            const item = tikTokItems[currentTikTokIndex];
+            const filePath = item.querySelector('source').src.split('/downloads/')[1];
+            const filename = item.dataset.name;
+            downloadFile(filePath, filename);
+        }
+
+        function shareTikTokMedia() {
+            if (navigator.share && tikTokItems.length > 0) {
+                const item = tikTokItems[currentTikTokIndex];
+                const videoSrc = item.querySelector('source').src;
+                navigator.share({
+                    title: 'Check out this video',
+                    url: videoSrc
+                }).catch(console.error);
+            } else {
+                showToast('Sharing not supported on this device', 'info');
+            }
+        }
+
+        // Apply filters and sorting
+        function applyFiltersAndSort() {
+            const gallery = document.getElementById('mediaGallery');
+            if (!gallery) return;
+
+            let filteredItems = allMediaItems;
+
+            // Apply filter
+            if (currentMediaFilter !== 'all') {
+                filteredItems = allMediaItems.filter(item =>
+                    item.dataset.type === currentMediaFilter
+                );
+            }
+
+            // Apply sorting
+            filteredItems.sort((a, b) => {
+                switch (currentMediaSort) {
+                    case 'date-desc':
+                        return parseFloat(b.dataset.date) - parseFloat(a.dataset.date);
+                    case 'date-asc':
+                        return parseFloat(a.dataset.date) - parseFloat(b.dataset.date);
+                    case 'name-asc':
+                        return a.dataset.name.localeCompare(b.dataset.name);
+                    case 'name-desc':
+                        return b.dataset.name.localeCompare(a.dataset.name);
+                    case 'size-desc':
+                        return parseInt(b.dataset.size) - parseInt(a.dataset.size);
+                    case 'size-asc':
+                        return parseInt(a.dataset.size) - parseInt(b.dataset.size);
+                    default:
+                        return 0;
+                }
+            });
+
+            // Hide all items first
+            allMediaItems.forEach(item => item.style.display = 'none');
+
+            // Show and reorder filtered items
+            filteredItems.forEach((item, index) => {
+                item.style.display = 'block';
+                item.style.order = index;
+            });
+        }
+
+        // Navigation functions
+        function goBack() {
+            console.log('goBack called');
+            window.history.back();
+        }
+
+        function downloadNewContent(username, platform) {
+            username = username || '{{ user.username }}';
+            platform = platform || '{{ user.platform }}' || 'tiktok';
+
+            fetch(`/api/download_user/${username}`, {
+                method: 'POST'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        if (platform === 'instagram') {
+                            showToast('Download started - including posts, stories, and highlights!', 'success', 6000);
+                        } else {
+                            showToast('Download started...', 'info');
+                        }
+                        showProgressModal(username);
+                    } else {
+                        showToast(data.error || 'Failed to start download', 'error');
+                    }
+                })
+                .catch(error => {
+                    showToast('Error starting download', 'error');
+                });
+        }
+
+        function downloadZip(username, platform) {
+            username = username || '{{ user.username }}';
+            platform = platform || '{{ user.platform }}' || 'tiktok';
+
+            const link = document.createElement('a');
+            link.href = `/api/download_zip/${username}?platform=${encodeURIComponent(platform)}`;
+            link.download = `${username}_content.zip`;
+            link.click();
+            showToast('Starting ZIP download...', 'info');
+        }
+
+        function testAccess() {
+            fetch('/api/test_access')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast('Access test successful!', 'success');
+                    } else {
+                        showToast(`Access test failed: ${data.message}`, 'error');
+                    }
+                })
+                .catch(error => {
+                    showToast('Error testing access', 'error');
+                });
+        }
+
+        // File actions
+        function downloadFile(filePath, filename) {
+            const link = document.createElement('a');
+            link.href = `/downloads/${filePath}`;
+            link.download = filename;
+            link.click();
+            showToast('Downloading file...', 'info');
+        }
+
+        function showFileInfo(filename, size, modified) {
+            const sizeFormatted = (size / 1024 / 1024).toFixed(2);
+            const dateFormatted = new Date(modified).toLocaleString();
+
+            const content = `
+        <div class="file-info-details">
+            <div class="info-row">
+                <span class="info-label">Filename:</span>
+                <span class="info-value">${filename}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Size:</span>
+                <span class="info-value">${sizeFormatted} MB</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Modified:</span>
+                <span class="info-value">${dateFormatted}</span>
+            </div>
+        </div>
+    `;
+
+            document.getElementById('fileInfoContent').innerHTML = content;
+            document.getElementById('fileInfoModal').style.display = 'flex';
+        }
+
+        function closeFileInfoModal() {
+            document.getElementById('fileInfoModal').style.display = 'none';
+        }
+
+        // Lightbox functionality
+        function openLightbox(imageSrc, caption) {
+            const lightbox = document.getElementById('lightboxOverlay');
+            const image = document.getElementById('lightboxImage');
+            const captionElement = document.getElementById('lightboxCaption');
+
+            image.src = imageSrc;
+            captionElement.textContent = caption;
+            lightbox.style.display = 'flex';
+
+            // Prevent body scroll
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeLightbox() {
+            document.getElementById('lightboxOverlay').style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        // Instagram functionality
+        let currentInstagramSection = 'posts';
+
+        function showInstagramSection(section) {
+            // Update navigation buttons
+            document.querySelectorAll('.instagram-nav-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(section + 'NavBtn').classList.add('active');
+
+            // Hide all sections
+            document.getElementById('mediaGallery').style.display = section === 'posts' ? 'grid' : 'none';
+            document.querySelector('.media-controls').style.display = section === 'posts' ? 'flex' : 'none';
+
+            const storiesSection = document.getElementById('storiesSection');
+            const highlightsSection = document.getElementById('highlightsSection');
+
+            if (storiesSection) storiesSection.style.display = section === 'stories' ? 'block' : 'none';
+            if (highlightsSection) highlightsSection.style.display = section === 'highlights' ? 'block' : 'none';
+
+            currentInstagramSection = section;
+        }
+
+        function downloadInstagramStories(username) {
+            fetch(`/api/downloads/instagram/stories/${username}`, {
+                method: 'POST'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast('Stories download started...', 'info');
+                    } else {
+                        showToast(data.error || 'Failed to start stories download', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error starting stories download:', error);
+                    showToast('Error starting stories download', 'error');
+                });
+        }
+
+        function downloadInstagramHighlights(username) {
+            fetch(`/api/downloads/instagram/highlights/${username}`, {
+                method: 'POST'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast('Highlights download started...', 'info');
+                    } else {
+                        showToast(data.error || 'Failed to start highlights download', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error starting highlights download:', error);
+                    showToast('Error starting highlights download', 'error');
+                });
+        }
+
+        function testInstagramHighlights(username) {
+            console.log('Testing Instagram highlights for:', username);
+            fetch(`/api/test_instagram_highlights/${username}`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Highlights test result:', data);
+                    if (data.success) {
+                        showToast('Highlights test successful!', 'success');
+                    } else {
+                        showToast(`Highlights test failed. Check console for details.`, 'error');
+                    }
+                    // Always log the output for debugging
+                    console.log('Command:', data.command);
+                    console.log('URL:', data.url);
+                    console.log('Output:', data.output);
+                })
+                .catch(error => {
+                    console.error('Error testing highlights:', error);
+                    showToast('Error testing highlights access', 'error');
+                });
+        }
+
+        function testInstagramStories(username) {
+            console.log('Testing Instagram stories for:', username);
+            fetch(`/api/test_instagram_stories/${username}`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Stories test result:', data);
+                    if (data.success) {
+                        showToast('Stories test successful!', 'success');
+                    } else {
+                        showToast(`Stories test failed. Check console for details.`, 'error');
+                    }
+                    // Always log the output for debugging
+                    console.log('Command:', data.command);
+                    console.log('URL:', data.url);
+                    console.log('Output:', data.output);
+                })
+                .catch(error => {
+                    console.error('Error testing stories:', error);
+                    showToast('Error testing stories access', 'error');
+                });
+        }
+
+        // Instagram highlights functionality
+        let currentHighlightFiles = [];
+        let currentHighlightIndex = 0;
+        let currentHighlightName = '';
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        function openHighlightStory(highlightName, files) {
+            console.log('Opening highlight story:', highlightName, files);
+
+            // Validate inputs
+            if (!highlightName || !files || !Array.isArray(files) || files.length === 0) {
+                console.error('Invalid highlight data:', { highlightName, files });
+                showToast('Error: Invalid highlight data', 'error');
+                return;
+            }
+
+            currentHighlightFiles = files;
+            currentHighlightIndex = 0;
+            currentHighlightName = highlightName;
+
+            const modal = document.getElementById('highlightStoryModal');
+            if (!modal) {
+                console.error('Highlight story modal not found');
+                showToast('Error: Modal not found', 'error');
+                return;
+            }
+
+            modal.style.display = 'block';
+
+            const storyName = document.getElementById('highlightStoryName');
+            if (storyName) {
+                storyName.textContent = highlightName;
+            } else {
+                console.warn('highlightStoryName element not found');
+            }
+
+            document.body.style.overflow = 'hidden';
+
+            // Add touch event listeners
+            modal.addEventListener('touchstart', handleTouchStart, { passive: true });
+            modal.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+            renderHighlightStory();
+        }
+
+        function closeHighlightStoryModal() {
+            const modal = document.getElementById('highlightStoryModal');
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+
+            // Remove touch event listeners
+            modal.removeEventListener('touchstart', handleTouchStart);
+            modal.removeEventListener('touchend', handleTouchEnd);
+
+            // Pause any playing videos
+            const videos = document.querySelectorAll('#highlightStoryContent video');
+            videos.forEach(video => video.pause());
+        }
+
+        function handleTouchStart(event) {
+            touchStartX = event.touches[0].clientX;
+        }
+
+        function handleTouchEnd(event) {
+            touchEndX = event.changedTouches[0].clientX;
+            handleSwipe();
+        }
+
+        function handleSwipe() {
+            const swipeThreshold = 50;
+            const swipeDistance = touchEndX - touchStartX;
+
+            if (Math.abs(swipeDistance) > swipeThreshold) {
+                if (swipeDistance > 0) {
+                    // Swipe right - go to previous
+                    navigateHighlightStory('prev');
+                } else {
+                    // Swipe left - go to next
+                    navigateHighlightStory('next');
+                }
+            }
+        }
+
+        // Removed adjustMediaSize function - using CSS-only approach
+
+        function renderHighlightStory() {
+            console.log('renderHighlightStory called');
+            console.log('currentHighlightFiles:', currentHighlightFiles);
+            console.log('currentHighlightIndex:', currentHighlightIndex);
+
+            if (!currentHighlightFiles || currentHighlightFiles.length === 0) {
+                console.error('No highlight files to render');
+                showToast('No files to display', 'error');
+                return;
+            }
+
+            if (currentHighlightIndex >= currentHighlightFiles.length) {
+                console.error('Invalid highlight index:', currentHighlightIndex, 'length:', currentHighlightFiles.length);
+                currentHighlightIndex = 0;
+            }
+
+            const container = document.getElementById('highlightStoryContent');
+            const counter = document.getElementById('highlightStoryCounter');
+            const progressFill = document.getElementById('highlightProgressFill');
+
+            if (!container) {
+                console.error('highlightStoryContent container not found');
+                showToast('Error: Modal container not found', 'error');
+                return;
+            }
+
+            console.log('Container found:', !!container);
+            console.log('Counter found:', !!counter);
+            console.log('ProgressFill found:', !!progressFill);
+
+            const currentFile = currentHighlightFiles[currentHighlightIndex];
+            console.log('Current file:', currentFile);
+
+            if (!currentFile || !currentFile.path) {
+                console.error('Invalid current file:', currentFile);
+                showToast('Error: Invalid file data', 'error');
+                return;
+            }
+
+            let mediaHTML = '';
+            const mediaPath = `/downloads/${currentFile.path}`;
+
+            if (currentFile.type === 'video') {
+                console.log('Rendering video:', currentFile.path);
+                mediaHTML = `
+            <video class="highlight-story-media" 
+                   controls 
+                   autoplay 
+                   muted 
+                   playsinline
+                   onloadstart="console.log('Video loading:', '${currentFile.filename}')"
+                   oncanplay="console.log('Video can play:', '${currentFile.filename}')"
+                   onerror="console.error('Video error:', this.error, '${mediaPath}')">
+                <source src="${mediaPath}" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+        `;
+            } else {
+                console.log('Rendering image:', currentFile.path);
+                mediaHTML = `
+            <img class="highlight-story-media" 
+                 src="${mediaPath}" 
+                 alt="${currentFile.filename}"
+                 onload="console.log('Image loaded:', '${currentFile.filename}')"
+                 onerror="console.error('Image error:', '${mediaPath}')">
+        `;
+            }
+
+            console.log('Setting container innerHTML');
+            container.innerHTML = mediaHTML;
+            console.log('Container innerHTML set successfully');
+
+            if (counter) {
+                counter.textContent = `${currentHighlightIndex + 1} / ${currentHighlightFiles.length}`;
+                console.log('Counter updated to:', counter.textContent);
+            }
+
+            // Update progress bar
+            if (progressFill) {
+                const progress = ((currentHighlightIndex + 1) / currentHighlightFiles.length) * 100;
+                progressFill.style.width = `${progress}%`;
+                console.log('Progress bar updated to:', progress + '%');
+            }
+
+            // Update navigation buttons
+            const prevBtn = document.getElementById('highlightPrevBtn');
+            const nextBtn = document.getElementById('highlightNextBtn');
+
+            if (prevBtn) {
+                prevBtn.disabled = currentHighlightIndex === 0;
+            }
+            if (nextBtn) {
+                nextBtn.disabled = currentHighlightIndex === currentHighlightFiles.length - 1;
+            }
+
+            console.log('Navigation buttons updated');
+            console.log('renderHighlightStory completed');
+        }
+
+        function navigateHighlightStory(direction) {
+            if (direction === 'next' && currentHighlightIndex < currentHighlightFiles.length - 1) {
+                currentHighlightIndex++;
+            } else if (direction === 'prev' && currentHighlightIndex > 0) {
+                currentHighlightIndex--;
+            }
+
+            renderHighlightStory();
+        }
+
+        function closeHighlightsMediaView() {
+            console.log('closeHighlightsMediaView called');
+
+            // Hide the highlights media view and show main content
+            const mediaView = document.getElementById('highlightsMediaView');
+            const mainContent = document.getElementById('mainContent');
+
+            console.log('mediaView found:', !!mediaView);
+            console.log('mainContent found:', !!mainContent);
+
+            if (mediaView) {
+                mediaView.style.display = 'none';
+                console.log('Hidden highlights media view');
+            }
+
+            if (mainContent) {
+                mainContent.style.display = 'block';
+                console.log('Shown main content');
+            }
+
+            // Also ensure Instagram sections are properly displayed if on Instagram
+            const platform = '{{ user.platform }}';
+            if (platform === 'instagram') {
+                showInstagramSection('highlights');
+            }
+        }
+
+        // Initialize Instagram section on page load
+        document.addEventListener('DOMContentLoaded', function () {
+            const isInstagram = '{{ platform }}' === 'instagram';
+            console.log('DOMContentLoaded - isInstagram:', isInstagram);
+
+            if (isInstagram) {
+                // Show posts section by default
+                showInstagramSection('posts');
+
+                // Add click listeners to highlights
+                const highlightElements = document.querySelectorAll('.profile-highlight, .highlight-story');
+                console.log('Found highlight elements:', highlightElements.length);
+
+                highlightElements.forEach((highlight, index) => {
+                    console.log(`Setting up highlight ${index + 1}:`, {
+                        element: highlight,
+                        highlightName: highlight.dataset.highlightName,
+                        hasFiles: !!highlight.dataset.highlightFiles
+                    });
+
+                    highlight.addEventListener('click', function (event) {
+                        event.preventDefault();
+                        console.log('Highlight clicked:', this);
+
+                        const highlightName = this.dataset.highlightName;
+                        const highlightFilesRaw = this.dataset.highlightFiles;
+
+                        console.log('Raw data:', {
+                            highlightName,
+                            highlightFilesRaw,
+                            hasData: !!highlightFilesRaw
+                        });
+
+                        if (!highlightName) {
+                            console.error('Missing highlight name');
+                            showToast('Error: Missing highlight name', 'error');
+                            return;
+                        }
+
+                        if (!highlightFilesRaw) {
+                            console.error('Missing highlight files data');
+                            showToast('Error: Missing highlight files data', 'error');
+                            return;
+                        }
+
+                        let highlightFiles;
+                        try {
+                            highlightFiles = JSON.parse(highlightFilesRaw);
+                            console.log('Parsed highlight files:', highlightFiles);
+                        } catch (e) {
+                            console.error('Failed to parse highlight files:', e, highlightFilesRaw);
+                            showToast('Error: Invalid highlight data format', 'error');
+                            return;
+                        }
+
+                        console.log('Opening highlight story:', highlightName, highlightFiles);
+                        openHighlightStory(highlightName, highlightFiles);
+                    });
+                });
+
+                console.log('Highlight event listeners set up');
+            }
+
+            // CSS handles all sizing automatically
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                closeLightbox();
+                closeFileInfoModal();
+                closeHighlightStoryModal();
+            }
+
+            // Highlight story navigation
+            if (document.getElementById('highlightStoryModal').style.display === 'block') {
+                if (event.key === 'ArrowLeft') {
+                    event.preventDefault();
+                    navigateHighlightStory('prev');
+                } else if (event.key === 'ArrowRight') {
+                    event.preventDefault();
+                    navigateHighlightStory('next');
+                }
+            }
+        });
+    </script>
+    {% endblock %}

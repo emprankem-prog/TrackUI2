@@ -1,0 +1,6 @@
+wheel
+flask
+Werkzeug
+gallery-dl
+yt_dlp
+ffmpeg

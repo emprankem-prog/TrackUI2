@@ -1,0 +1,473 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="main-container">
+    <!-- Controls Bar -->
+    <div class="controls-bar">
+        <div class="controls-left">
+            <button class="btn btn-primary" onclick="showAddUserModal()">
+                <span class="btn-icon">➕</span>
+                Add User
+            </button>
+            <button class="btn btn-secondary" onclick="showTagManagerModal()">
+                <span class="btn-icon">🏷️</span>
+                Manage Tags
+            </button>
+            <button class="btn btn-secondary" onclick="showInstagramFollowingModal()">
+                <span class="btn-icon">📸</span>
+                Instagram Following
+            </button>
+        </div>
+
+        <div class="controls-center">
+            <!-- Search -->
+            <div class="filter-group">
+                <label for="userSearch">Search:</label>
+                <input type="text" id="userSearch" placeholder="Username..."
+                    value="{{ request.args.get('search', '') }}" oninput="debouncedSearch()"
+                    style="width: 150px; padding: 6px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary);">
+            </div>
+
+            <!-- Tag Filter -->
+            <div class="filter-group">
+                <label for="platformFilter">Platform:</label>
+                <select id="platformFilter" onchange="filterByPlatform()">
+                    <option value="">All</option>
+                    <option value="tiktok" {% if request.args.get('platform','')=='tiktok' %}selected{% endif %}>TikTok
+                    </option>
+                    <option value="instagram" {% if request.args.get('platform','')=='instagram' %}selected{% endif %}>
+                        Instagram</option>
+                    <option value="coomer" {% if request.args.get('platform','')=='coomer' %}selected{% endif %}>
+                        Coomer</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="tagFilter">Filter by Tag:</label>
+                <select id="tagFilter" onchange="filterByTag()">
+                    <option value="">All Tags</option>
+                    {% for tag in tags %}
+                    <option value="{{ tag.name }}" {% if current_tag==tag.name %}selected{% endif %}>
+                        {{ tag.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- View Toggle -->
+            <div class="view-toggle">
+                <button class="view-btn active" id="gridViewBtn" onclick="toggleView('grid')">
+                    <span class="btn-icon">▦</span>
+                </button>
+                <button class="view-btn" id="listViewBtn" onclick="toggleView('list')">
+                    <span class="btn-icon">☰</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="controls-right">
+            <!-- Per Page Selector -->
+            <div class="per-page-selector">
+                <label for="perPageSelect">Show:</label>
+                <select id="perPageSelect" onchange="changePerPage()">
+                    <option value="12" {% if pagination.per_page==12 %}selected{% endif %}>12</option>
+                    <option value="24" {% if pagination.per_page==24 %}selected{% endif %}>24</option>
+                    <option value="36" {% if pagination.per_page==36 %}selected{% endif %}>36</option>
+                    <option value="48" {% if pagination.per_page==48 %}selected{% endif %}>48</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Users Display -->
+    {% if users %}
+    <div class="users-container" id="usersContainer">
+        <div class="users-grid" id="usersGrid">
+            {% for user in users %}
+            <div class="user-card" data-username="{{ user.username }}" data-platform="{{ user.platform }}">
+                <div class="user-card-header">
+                    <div class="user-avatar">
+                        {% if user.avatar_available %}
+                        <img src="{{ url_for('avatar', username=user.username) }}?platform={{ user.platform }}"
+                            alt="{{ user.display_name or user.username }}" loading="lazy">
+                        {% else %}
+                        <div class="avatar-placeholder" title="Avatar not available - click 'Refresh Avatars' to retry">
+                            {{ (user.display_name or user.username)[0]|upper }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="user-info">
+                        <h3 class="user-name">
+                            <a
+                                href="{{ url_for('user_profile', username=user.username) }}?platform={{ user.platform }}">
+                                {{ user.display_name or user.username }}
+                            </a>
+                            <span class="platform-badge platform-{{ user.platform }}" title="{{ user.platform|title }}">
+                                {% if user.platform == 'instagram' %}
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                    <path
+                                        d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
+                                </svg>
+                                {% elif user.platform == 'coomer' %}
+                                <img src="{{ url_for('static', filename='coomer_logo.png') }}" alt="Coomer" width="16"
+                                    height="16" style="vertical-align: middle;">
+                                {% else %}
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                    <path
+                                        d="M12.53.02C13.84 0 15.14.01 16.44 0c.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z" />
+                                </svg>
+                                {% endif %}
+                            </span>
+                        </h3>
+                        <p class="user-username">@{{ user.username }}</p>
+                        <div class="user-stats">
+                            <span class="stat-item">
+                                <span class="stat-label">Videos:</span>
+                                <span class="stat-value">{{ user.video_count or 0 }}</span>
+                            </span>
+                            <span class="stat-item">
+                                <span class="stat-label">Downloaded:</span>
+                                <span class="stat-value">{{ user.downloaded_files or 0 }}</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="user-card-body">
+                    <!-- User Tags -->
+                    {% if user.tags %}
+                    <div class="user-tags">
+                        {% for tag in user.tags %}
+                        <span class="tag" style="background-color: {{ tag.color }}">{{ tag.name }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <!-- Tracking Status -->
+                    <div class="tracking-status">
+                        <label class="toggle-switch">
+                            <input type="checkbox" {% if user.is_tracking %}checked{% endif %}
+                                onchange="toggleTracking('{{ user.username }}', this)">
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">Tracking</span>
+                        </label>
+                    </div>
+
+                    <!-- Sync Info -->
+                    <div class="sync-info">
+                        {% if user.last_sync %}
+                        <small class="last-sync">
+                            Last sync: {{ user.last_sync|strftime('%Y-%m-%d %H:%M') }}
+                        </small>
+                        {% else %}
+                        <small class="last-sync">Never synced</small>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="user-card-footer">
+                    <div class="card-actions">
+                        <button class="btn btn-sm btn-primary"
+                            onclick="downloadUserContent('{{ user.username }}', '{{ user.platform }}')">
+                            <span class="btn-icon">⬇️</span>
+                            Download
+                        </button>
+                        <button class="btn btn-sm btn-secondary" onclick="showUserMenu('{{ user.username }}', event)">
+                            <span class="btn-icon">⚙️</span>
+                            Options
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if pagination.total > pagination.per_page %}
+    <div class="pagination-container">
+        <div class="pagination">
+            {% if pagination.has_prev %}
+            <a href="?page={{ pagination.prev_num }}&per_page={{ pagination.per_page }}{% if current_tag %}&tag={{ current_tag }}{% endif %}"
+                class="pagination-btn">
+                ← Previous
+            </a>
+            {% endif %}
+
+            <div class="pagination-info">
+                <span>
+                    Page {{ pagination.page }} of {{ ((pagination.total - 1) // pagination.per_page) + 1 }}
+                    ({{ pagination.total }} total users)
+                </span>
+            </div>
+
+            {% if pagination.has_next %}
+            <a href="?page={{ pagination.next_num }}&per_page={{ pagination.per_page }}{% if current_tag %}&tag={{ current_tag }}{% endif %}"
+                class="pagination-btn">
+                Next →
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-content">
+            <div class="empty-state-icon">📱</div>
+            <h2>No Users Added Yet</h2>
+            <p>Start by adding some users to track their content.</p>
+            <button class="btn btn-primary btn-lg" onclick="showAddUserModal()">
+                <span class="btn-icon">➕</span>
+                Add Your First User
+            </button>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- User Context Menu -->
+<div class="context-menu" id="userContextMenu" style="display: none;">
+    <div class="context-menu-item" onclick="viewUserProfile()">
+        <span class="menu-icon">👤</span>
+        View Profile
+    </div>
+    <div class="context-menu-item" onclick="downloadUserZip()">
+        <span class="menu-icon">📦</span>
+        Download ZIP
+    </div>
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-item" onclick="editUserTags()">
+        <span class="menu-icon">🏷️</span>
+        Edit Tags
+    </div>
+    <div class="context-menu-item" onclick="refreshUserAvatarContext()">
+        <span class="menu-icon">👤</span>
+        Refresh Avatar
+    </div>
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-item danger" onclick="removeUser()">
+        <span class="menu-icon">🗑️</span>
+        Remove User
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let currentContextUser = null;
+    let currentView = 'grid';
+    let searchTimeout;
+
+    // Search function with debounce
+    function debouncedSearch() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            const searchQuery = document.getElementById('userSearch').value;
+            const currentUrl = new URL(window.location);
+
+            if (searchQuery) {
+                currentUrl.searchParams.set('search', searchQuery);
+            } else {
+                currentUrl.searchParams.delete('search');
+            }
+
+            currentUrl.searchParams.set('page', '1'); // Reset to first page
+            window.location.href = currentUrl.toString();
+        }, 500);
+    }
+
+    // View management
+    function toggleView(view) {
+        currentView = view;
+        const gridBtn = document.getElementById('gridViewBtn');
+        const listBtn = document.getElementById('listViewBtn');
+        const usersGrid = document.getElementById('usersGrid');
+
+        if (view === 'grid') {
+            gridBtn.classList.add('active');
+            listBtn.classList.remove('active');
+            usersGrid.classList.remove('list-view');
+        } else {
+            listBtn.classList.add('active');
+            gridBtn.classList.remove('active');
+            usersGrid.classList.add('list-view');
+        }
+    }
+
+    // Filter by tag
+    function filterByTag() {
+        const tagFilter = document.getElementById('tagFilter').value;
+        const currentUrl = new URL(window.location);
+
+        if (tagFilter) {
+            currentUrl.searchParams.set('tag', tagFilter);
+        } else {
+            currentUrl.searchParams.delete('tag');
+        }
+        currentUrl.searchParams.set('page', '1'); // Reset to first page
+
+        window.location.href = currentUrl.toString();
+    }
+
+    function filterByPlatform() {
+        const platform = document.getElementById('platformFilter').value;
+        const currentUrl = new URL(window.location);
+        if (platform) currentUrl.searchParams.set('platform', platform);
+        else currentUrl.searchParams.delete('platform');
+        currentUrl.searchParams.set('page', '1');
+        window.location.href = currentUrl.toString();
+    }
+
+    // Change items per page
+    function changePerPage() {
+        const perPage = document.getElementById('perPageSelect').value;
+        const currentUrl = new URL(window.location);
+        currentUrl.searchParams.set('per_page', perPage);
+        currentUrl.searchParams.set('page', '1'); // Reset to first page
+        window.location.href = currentUrl.toString();
+    }
+
+    // User context menu
+    function showUserMenu(username, event) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        currentContextUser = username;
+        const contextMenu = document.getElementById('userContextMenu');
+
+        // Position the menu
+        contextMenu.style.left = event.pageX + 'px';
+        contextMenu.style.top = event.pageY + 'px';
+        contextMenu.style.display = 'block';
+
+        // Hide menu when clicking outside
+        setTimeout(() => {
+            document.addEventListener('click', hideContextMenu, { once: true });
+        }, 10);
+    }
+
+    function hideContextMenu() {
+        document.getElementById('userContextMenu').style.display = 'none';
+    }
+
+    function viewUserProfile() {
+        if (currentContextUser) {
+            const card = document.querySelector(`.user-card[data-username="${currentContextUser}"]`);
+            const platform = card?.dataset.platform || 'tiktok';
+            window.location.href = `/user/${currentContextUser}?platform=${encodeURIComponent(platform)}`;
+        }
+        hideContextMenu();
+    }
+
+    function downloadUserZip() {
+        if (currentContextUser) {
+            const card = document.querySelector(`.user-card[data-username="${currentContextUser}"]`);
+            const platform = card?.dataset.platform || 'tiktok';
+            const link = document.createElement('a');
+            link.href = `/api/download_zip/${currentContextUser}?platform=${encodeURIComponent(platform)}`;
+            link.download = `${currentContextUser}_content.zip`;
+            link.click();
+            showToast('Starting ZIP download...', 'info');
+        }
+        hideContextMenu();
+    }
+
+    function editUserTags() {
+        if (currentContextUser) {
+            showUserTagModal(currentContextUser);
+        }
+        hideContextMenu();
+    }
+
+    function refreshUserAvatarContext() {
+        if (currentContextUser) {
+            refreshUserAvatar(currentContextUser);
+        }
+        hideContextMenu();
+    }
+
+    function removeUser() {
+        if (currentContextUser) {
+            const username = currentContextUser;
+            const card = document.querySelector(`.user-card[data-username="${currentContextUser}"]`);
+            const platform = card?.dataset.platform || 'tiktok';
+            if (confirm(`Are you sure you want to remove @${username} (${platform})? This will also delete all downloaded files.`)) {
+                fetch(`/api/remove_user/${username}?delete_files=true&platform=${encodeURIComponent(platform)}`, {
+                    method: 'DELETE'
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            showToast('User removed successfully', 'success');
+                            setTimeout(() => location.reload(), 1000);
+                        } else {
+                            showToast(data.error || 'Failed to remove user', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        showToast('Error removing user', 'error');
+                    });
+            }
+        }
+        hideContextMenu();
+    }
+
+    // Toggle tracking status
+    function toggleTracking(username, checkbox) {
+        const card = checkbox.closest('.user-card');
+        const platform = card?.dataset.platform || 'tiktok';
+
+        fetch(`/api/toggle_tracking/${username}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ platform: platform })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(`Tracking ${data.tracking ? 'enabled' : 'disabled'} for @${username} (${platform})`, 'success');
+                } else {
+                    // Revert checkbox if failed
+                    checkbox.checked = !checkbox.checked;
+                    showToast(data.error || 'Failed to toggle tracking', 'error');
+                }
+            })
+            .catch(error => {
+                // Revert checkbox if failed
+                checkbox.checked = !checkbox.checked;
+                showToast('Error toggling tracking', 'error');
+            });
+    }
+
+    // Download user content
+    function downloadUserContent(username, platform) {
+        const url = `/api/download_user/${username}`;
+        fetch(url, {
+            method: 'POST'
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    if (platform === 'instagram') {
+                        showToast('Download started - including posts, stories, and highlights!', 'success', 6000);
+                    } else {
+                        showToast('Download started...', 'info');
+                    }
+                    showProgressModal(username);
+                } else {
+                    showToast(data.error || 'Failed to start download', 'error');
+                }
+            })
+            .catch(error => {
+                showToast('Error starting download', 'error');
+            });
+    }
+
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', function () {
+        // Set initial view
+        toggleView('grid');
+    });
+</script>
+{% endblock %}

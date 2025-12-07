@@ -1,0 +1,888 @@
+{% extends "layout.html" %}
+
+{% block title %}Feed - TrackUI{% endblock %}
+
+{% block content %}
+<div class="feed-container" id="feedContainer">
+    <div class="feed-header">
+        <a href="{{ url_for('index') }}" class="feed-back-btn">
+            <span>←</span> Back
+        </a>
+        <h2 class="feed-title">Feed</h2>
+        <div class="feed-actions">
+            <button class="feed-btn" id="shuffleBtn" onclick="shuffleFeed()" title="Shuffle">
+                🔀
+            </button>
+            <button class="feed-btn" id="filterBtn" onclick="toggleFilter()" title="Filter">
+                🎯
+            </button>
+        </div>
+    </div>
+
+    <!-- Filter Panel -->
+    <div class="feed-filter" id="feedFilter" style="display: none;">
+        <div class="filter-group">
+            <label>Type:</label>
+            <button class="filter-option" data-filter="all" onclick="setMediaFilter('all')">All</button>
+            <button class="filter-option" data-filter="video" onclick="setMediaFilter('video')">Videos</button>
+            <button class="filter-option" data-filter="image" onclick="setMediaFilter('image')">Images</button>
+        </div>
+        <div class="filter-group">
+            <label>Platform:</label>
+            <button class="filter-option" data-filter="all" onclick="setPlatformFilter('all')">All</button>
+            <button class="filter-option" data-filter="tiktok" onclick="setPlatformFilter('tiktok')">TikTok</button>
+            <button class="filter-option" data-filter="instagram"
+                onclick="setPlatformFilter('instagram')">Instagram</button>
+        </div>
+    </div>
+
+    <!-- Feed Items Container -->
+    <div class="feed-scroll" id="feedScroll">
+        <div class="feed-item-wrapper" id="feedItemWrapper">
+            <!-- Feed items will be dynamically loaded here -->
+        </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div class="feed-loading" id="feedLoading" style="display: none;">
+        <div class="spinner"></div>
+        <p>Loading more content...</p>
+    </div>
+
+    <!-- Empty State -->
+    <div class="feed-empty" id="feedEmpty" style="display: none;">
+        <div class="empty-icon">📱</div>
+        <h3>No Content Available</h3>
+        <p>Download some videos or images from your tracked users to see them here!</p>
+        <a href="{{ url_for('index') }}" class="btn btn-primary">Go to Dashboard</a>
+    </div>
+</div>
+
+<!-- Feed Item Template (hidden) -->
+<template id="feedItemTemplate">
+    <div class="feed-item" data-index="" data-path="">
+        <div class="feed-media-container">
+            <video class="feed-video" loop playsinline preload="metadata"></video>
+            <img class="feed-image" style="display: none;">
+        </div>
+
+        <div class="feed-overlay">
+            <div class="feed-user-info">
+                <div class="user-avatar"></div>
+                <div class="user-details">
+                    <div class="user-name"></div>
+                    <div class="user-username"></div>
+                </div>
+                <button class="follow-btn">Follow</button>
+            </div>
+
+            <div class="feed-actions-right">
+                <button class="feed-action-btn like-btn" onclick="toggleLike(this)">
+                    <span class="action-icon">🤍</span>
+                    <span class="action-label"></span>
+                </button>
+                <button class="feed-action-btn" onclick="shareMedia(this)">
+                    <span class="action-icon">📤</span>
+                    <span class="action-label">Share</span>
+                </button>
+                <button class="feed-action-btn" onclick="downloadMedia(this)">
+                    <span class="action-icon">💾</span>
+                    <span class="action-label">Save</span>
+                </button>
+                <button class="feed-action-btn" onclick="viewUserProfile(this)">
+                    <span class="action-icon">👤</span>
+                    <span class="action-label">Profile</span>
+                </button>
+            </div>
+
+            <div class="feed-info">
+                <div class="content-badge"></div>
+                <div class="platform-badge"></div>
+            </div>
+        </div>
+
+        <!-- Video Controls -->
+        <div class="feed-video-controls">
+            <button class="video-control-btn play-pause-btn" onclick="togglePlayPause(this)">
+                <span class="control-icon">▶️</span>
+            </button>
+            <button class="video-control-btn mute-btn" onclick="toggleMute(this)">
+                <span class="control-icon">🔊</span>
+            </button>
+            <button class="video-control-btn fullscreen-btn" onclick="toggleFullscreen(this)">
+                <span class="control-icon">⛶</span>
+            </button>
+        </div>
+    </div>
+</template>
+
+<style>
+    /* Feed Container */
+    .feed-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #000;
+        z-index: 1000;
+    }
+
+    .feed-header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        background: rgba(0, 0, 0, 0.8);
+        backdrop-filter: blur(10px);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px;
+        z-index: 1002;
+    }
+
+    .feed-back-btn {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #fff;
+        font-size: 16px;
+        text-decoration: none;
+        padding: 8px 16px;
+        border-radius: 8px;
+        transition: background 0.2s;
+    }
+
+    .feed-back-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .feed-title {
+        margin: 0;
+        color: #fff;
+        font-size: 24px;
+        font-weight: 600;
+    }
+
+    .feed-actions {
+        display: flex;
+        gap: 12px;
+    }
+
+    .feed-btn {
+        background: rgba(255, 255, 255, 0.1);
+        border: none;
+        color: #fff;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 18px;
+        transition: all 0.2s;
+    }
+
+    .feed-btn:hover {
+        background: rgba(255, 255, 255, 0.2);
+        transform: scale(1.1);
+    }
+
+    /* Filter Panel */
+    .feed-filter {
+        position: fixed;
+        top: 60px;
+        left: 0;
+        right: 0;
+        background: rgba(0, 0, 0, 0.9);
+        backdrop-filter: blur(10px);
+        padding: 20px;
+        z-index: 1001;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .filter-group {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+    .filter-group label {
+        color: #aaa;
+        font-size: 14px;
+        min-width: 80px;
+    }
+
+    .filter-option {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #fff;
+        padding: 8px 16px;
+        border-radius: 20px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s;
+    }
+
+    .filter-option:hover {
+        background: rgba(255, 255, 255, 0.2);
+    }
+
+    .filter-option.active {
+        background: #1db954;
+        border-color: #1db954;
+    }
+
+    /* Feed Scroll */
+    .feed-scroll {
+        height: 100vh;
+        overflow-y: scroll;
+        scroll-snap-type: y mandatory;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .feed-item-wrapper {
+        position: relative;
+    }
+
+    .feed-item {
+        position: relative;
+        width: 100%;
+        height: 100vh;
+        scroll-snap-align: start;
+        background: #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .feed-media-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Fix fullscreen behavior - Target the CONTAINER */
+    .feed-media-container:fullscreen {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background: black !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .feed-media-container:-webkit-full-screen {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background: black !important;
+        width: 100vw !important;
+        height: 100vh !important;
+    }
+
+    .feed-video,
+    .feed-image {
+        max-width: 100%;
+        max-height: 100vh;
+        object-fit: contain;
+    }
+
+    .feed-media-container:fullscreen .feed-video {
+        width: 100% !important;
+        height: 100% !important;
+        max-width: none !important;
+        max-height: none !important;
+        object-fit: contain !important;
+    }
+
+    .feed-media-container:-webkit-full-screen .feed-video {
+        width: 100% !important;
+        height: 100% !important;
+        max-width: none !important;
+        max-height: none !important;
+        object-fit: contain !important;
+    }
+
+    /* Feed Overlay */
+    .feed-overlay {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 10;
+    }
+
+    .feed-overlay>* {
+        pointer-events: auto;
+    }
+
+    /* Ensure controls are visible in fullscreen */
+    .feed-media-container:fullscreen .feed-overlay,
+    .feed-media-container:fullscreen .feed-video-controls {
+        z-index: 2147483647 !important;
+        /* Max z-index */
+    }
+
+    .feed-media-container:-webkit-full-screen .feed-overlay,
+    .feed-media-container:-webkit-full-screen .feed-video-controls {
+        z-index: 2147483647 !important;
+    }
+
+    /* User Info */
+    .feed-user-info {
+        position: absolute;
+        bottom: 100px;
+        left: 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: #fff;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+    }
+
+    .user-avatar {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: 2px solid #fff;
+    }
+
+    .user-details {
+        flex: 1;
+    }
+
+    .user-name {
+        font-size: 16px;
+        font-weight: 600;
+    }
+
+    .user-username {
+        font-size: 14px;
+        opacity: 0.8;
+    }
+
+    .follow-btn {
+        background: rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: #fff;
+        padding: 8px 20px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+
+    .follow-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    /* Feed Info */
+    .feed-info {
+        position: absolute;
+        top: 80px;
+        right: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .content-badge,
+    .platform-badge {
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(10px);
+        color: #fff;
+        padding: 6px 12px;
+        border-radius: 16px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    /* Video Controls */
+    .feed-video-controls {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 12px;
+        opacity: 0;
+        transition: opacity 0.3s;
+    }
+
+    .feed-item:hover .feed-video-controls {
+        opacity: 1;
+    }
+
+    .video-control-btn {
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: #fff;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 20px;
+        transition: all 0.2s;
+    }
+
+    .video-control-btn:hover {
+        background: rgba(0, 0, 0, 0.9);
+        transform: scale(1.1);
+    }
+
+    /* Loading & Empty States */
+    .feed-loading,
+    .feed-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        color: #fff;
+        text-align: center;
+    }
+
+    .spinner {
+        width: 48px;
+        height: 48px;
+        border: 4px solid rgba(255, 255, 255, 0.2);
+        border-top-color: #1db954;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .empty-icon {
+        font-size: 64px;
+        margin-bottom: 20px;
+    }
+
+    .feed-empty h3 {
+        margin: 0 0 12px;
+        font-size: 24px;
+    }
+
+    .feed-empty p {
+        margin: 0 0 24px;
+        color: #aaa;
+        max-width: 400px;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .feed-header {
+            height: 50px;
+            padding: 0 16px;
+        }
+
+        .feed-title {
+            font-size: 20px;
+        }
+
+        .feed-user-info {
+            bottom: 80px;
+            left: 16px;
+        }
+    }
+</style>
+
+<script>
+    let currentIndex = 0;
+    let mediaItems = [];
+    let likedPaths = new Set();
+    let isLoading = false;
+    let hasMore = true;
+    let currentFilters = {
+        mediaType: 'all',
+        platform: 'all'
+    };
+
+    // Initialize feed on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        loadLikes();
+        loadFeedMedia();
+        setupScrollListener();
+        setupKeyboardControls();
+    });
+
+    // Load liked media paths
+    async function loadLikes() {
+        try {
+            const response = await fetch('/api/feed/likes');
+            const data = await response.json();
+            if (data.success) {
+                likedPaths = new Set(data.likes);
+            }
+        } catch (error) {
+            console.error('Error loading likes:', error);
+        }
+    }
+
+    // Load feed media
+    async function loadFeedMedia(offset = 0) {
+        if (isLoading || !hasMore) return;
+
+        isLoading = true;
+        document.getElementById('feedLoading').style.display = 'flex';
+
+        try {
+            const response = await fetch(`/api/feed/media?limit=20&offset=${offset}`);
+            const data = await response.json();
+
+            if (data.success) {
+                if (data.media.length === 0 && offset === 0) {
+                    document.getElementById('feedEmpty').style.display = 'flex';
+                    document.getElementById('feedScroll').style.display = 'none';
+                } else {
+                    // Apply filters
+                    let filteredMedia = data.media;
+                    if (currentFilters.mediaType !== 'all') {
+                        filteredMedia = filteredMedia.filter(m => m.type === currentFilters.mediaType);
+                    }
+                    if (currentFilters.platform !== 'all') {
+                        filteredMedia = filteredMedia.filter(m => m.platform === currentFilters.platform);
+                    }
+
+                    mediaItems = mediaItems.concat(filteredMedia);
+                    hasMore = data.has_more;
+
+                    renderFeedItems(filteredMedia, offset);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading feed media:', error);
+            showToast('Error loading content', 'error');
+        } finally {
+            isLoading = false;
+            document.getElementById('feedLoading').style.display = 'none';
+        }
+    }
+
+    // Render feed items
+    function renderFeedItems(items, startIndex) {
+        const wrapper = document.getElementById('feedItemWrapper');
+        const template = document.getElementById('feedItemTemplate');
+
+        items.forEach((item, index) => {
+            const clone = template.content.cloneNode(true);
+            const feedItem = clone.querySelector('.feed-item');
+            const actualIndex = startIndex + index;
+
+            feedItem.dataset.index = actualIndex;
+            feedItem.dataset.path = item.path;
+            feedItem.dataset.username = item.username;
+            feedItem.dataset.platform = item.platform;
+
+            // Set media
+            const video = feedItem.querySelector('.feed-video');
+            const image = feedItem.querySelector('.feed-image');
+
+            if (item.type === 'video') {
+                video.src = `/downloads/${item.path}`;
+                video.style.display = 'block';
+                image.style.display = 'none';
+            } else {
+                image.src = `/downloads/${item.path}`;
+                image.style.display = 'block';
+                video.style.display = 'none';
+            }
+
+            // Set user info
+            feedItem.querySelector('.user-name').textContent = item.display_name;
+            feedItem.querySelector('.user-username').textContent = `@${item.username}`;
+
+            // Set badges
+            feedItem.querySelector('.content-badge').textContent = item.content_type;
+            feedItem.querySelector('.platform-badge').textContent = item.platform;
+
+            // Set like status (if button exists)
+            const likeBtn = feedItem.querySelector('.like-btn');
+            if (likeBtn) {
+                const isLiked = likedPaths.has(item.path);
+                likeBtn.dataset.liked = isLiked;
+                likeBtn.querySelector('.action-icon').textContent = isLiked ? '❤️' : '🤍';
+                if (isLiked) {
+                    likeBtn.classList.add('liked');
+                }
+            }
+
+            wrapper.appendChild(clone);
+        });
+
+        // Play first video if not already playing
+        if (startIndex === 0) {
+            playCurrentVideo();
+        }
+    }
+
+    // Setup scroll listener for infinite scroll
+    function setupScrollListener() {
+        const feedScroll = document.getElementById('feedScroll');
+
+        feedScroll.addEventListener('scroll', () => {
+            const scrollTop = feedScroll.scrollTop;
+            const scrollHeight = feedScroll.scrollHeight;
+            const clientHeight = feedScroll.clientHeight;
+
+            // Load more when near bottom
+            if (scrollHeight - scrollTop - clientHeight < 1000) {
+                loadFeedMedia(mediaItems.length);
+            }
+
+            // Update current video playback
+            updateCurrentVideo();
+        });
+    }
+
+    // Update current video based on scroll position
+    function updateCurrentVideo() {
+        const feedScroll = document.getElementById('feedScroll');
+        const scrollTop = feedScroll.scrollTop;
+        const windowHeight = window.innerHeight;
+
+        const items = document.querySelectorAll('.feed-item');
+        items.forEach((item, index) => {
+            const rect = item.getBoundingClientRect();
+            const isVisible = rect.top < windowHeight / 2 && rect.bottom > windowHeight / 2;
+
+            const video = item.querySelector('.feed-video');
+            if (video && video.src) {
+                if (isVisible && !item.classList.contains('active')) {
+                    item.classList.add('active');
+                    video.play().catch(() => { });
+                } else if (!isVisible && item.classList.contains('active')) {
+                    item.classList.remove('active');
+                    video.pause();
+                }
+            }
+        });
+    }
+
+    // Play current video
+    function playCurrentVideo() {
+        const items = document.querySelectorAll('.feed-item');
+        if (items.length > 0) {
+            const video = items[0].querySelector('.feed-video');
+            if (video && video.src) {
+                video.play().catch(() => { });
+            }
+        }
+    }
+
+    // Toggle like
+    async function toggleLike(btn) {
+        const feedItem = btn.closest('.feed-item');
+        const mediaPath = feedItem.dataset.path;
+        const isLiked = btn.dataset.liked === 'true';
+
+        try {
+            const response = await fetch('/api/feed/like', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ media_path: mediaPath })
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                btn.dataset.liked = data.liked;
+                btn.querySelector('.action-icon').textContent = data.liked ? '❤️' : '🤍';
+
+                if (data.liked) {
+                    btn.classList.add('liked');
+                    likedPaths.add(mediaPath);
+                } else {
+                    btn.classList.remove('liked');
+                    likedPaths.delete(mediaPath);
+                }
+            }
+        } catch (error) {
+            console.error('Error toggling like:', error);
+        }
+    }
+
+    // Share media
+    function shareMedia(btn) {
+        const feedItem = btn.closest('.feed-item');
+        const mediaPath = feedItem.dataset.path;
+        const url = `${window.location.origin}/downloads/${mediaPath}`;
+
+        if (navigator.share) {
+            navigator.share({
+                title: 'Check out this content',
+                url: url
+            }).catch(() => { });
+        } else {
+            navigator.clipboard.writeText(url);
+            showToast('Link copied to clipboard!', 'success');
+        }
+    }
+
+    // Download media
+    function downloadMedia(btn) {
+        const feedItem = btn.closest('.feed-item');
+        const mediaPath = feedItem.dataset.path;
+        window.open(`/downloads/${mediaPath}`, '_blank');
+    }
+
+    // View user profile
+    function viewUserProfile(btn) {
+        const feedItem = btn.closest('.feed-item');
+        const username = feedItem.dataset.username;
+        window.location.href = `/user/${username}`;
+    }
+
+    // Toggle play/pause
+    function togglePlayPause(btn) {
+        const feedItem = btn.closest('.feed-item');
+        const video = feedItem.querySelector('.feed-video');
+
+        if (video.paused) {
+            video.play();
+            btn.querySelector('.control-icon').textContent = '⏸️';
+        } else {
+            video.pause();
+            btn.querySelector('.control-icon').textContent = '▶️';
+        }
+    }
+
+    // Toggle mute
+    function toggleMute(btn) {
+        const feedItem = btn.closest('.feed-item');
+        const video = feedItem.querySelector('.feed-video');
+
+        video.muted = !video.muted;
+        btn.querySelector('.control-icon').textContent = video.muted ? '🔇' : '🔊';
+    }
+
+    // Toggle fullscreen - Targets the CONTAINER
+    function toggleFullscreen(btn) {
+        const feedItem = btn.closest('.feed-item');
+        const container = feedItem.querySelector('.feed-media-container');
+
+        if (!document.fullscreenElement) {
+            if (container.requestFullscreen) {
+                container.requestFullscreen();
+            } else if (container.webkitRequestFullscreen) { /* Safari */
+                container.webkitRequestFullscreen();
+            } else if (container.msRequestFullscreen) { /* IE11 */
+                container.msRequestFullscreen();
+            }
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) { /* Safari */
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) { /* IE11 */
+                document.msExitFullscreen();
+            }
+        }
+    }
+
+    // Shuffle feed
+    function shuffleFeed() {
+        mediaItems = shuffleArray(mediaItems);
+        document.getElementById('feedItemWrapper').innerHTML = '';
+        renderFeedItems(mediaItems, 0);
+        document.getElementById('feedScroll').scrollTop = 0;
+    }
+
+    // Toggle filter panel
+    function toggleFilter() {
+        const filter = document.getElementById('feedFilter');
+        filter.style.display = filter.style.display === 'none' ? 'block' : 'none';
+    }
+
+    // Set media filter
+    function setMediaFilter(type) {
+        currentFilters.mediaType = type;
+        applyFilters();
+
+        // Update active state
+        document.querySelectorAll('.filter-group:first-child .filter-option').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.filter === type);
+        });
+    }
+
+    // Set platform filter
+    function setPlatformFilter(platform) {
+        currentFilters.platform = platform;
+        applyFilters();
+
+        // Update active state
+        document.querySelectorAll('.filter-group:last-child .filter-option').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.filter === platform);
+        });
+    }
+
+    // Apply filters
+    function applyFilters() {
+        mediaItems = [];
+        hasMore = true;
+        document.getElementById('feedItemWrapper').innerHTML = '';
+        loadFeedMedia(0);
+    }
+
+    // Keyboard controls
+    function setupKeyboardControls() {
+        document.addEventListener('keydown', (e) => {
+            const feedScroll = document.getElementById('feedScroll');
+
+            switch (e.key) {
+                case 'ArrowDown':
+                case ' ':
+                    e.preventDefault();
+                    feedScroll.scrollBy({ top: window.innerHeight, behavior: 'smooth' });
+                    break;
+                case 'ArrowUp':
+                    e.preventDefault();
+                    feedScroll.scrollBy({ top: -window.innerHeight, behavior: 'smooth' });
+                    break;
+                case 'l':
+                    e.preventDefault();
+                    const activeItem = document.querySelector('.feed-item.active');
+                    if (activeItem) {
+                        const likeBtn = activeItem.querySelector('.like-btn');
+                        toggleLike(likeBtn);
+                    }
+                    break;
+            }
+        });
+    }
+
+    // Utility: Shuffle array
+    function shuffleArray(array) {
+        const newArray = [...array];
+        for (let i = newArray.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+        }
+        return newArray;
+    }
+
+    // Show toast (use existing function if available)
+    function showToast(message, type = 'info') {
+        if (window.parent && window.parent.showToast) {
+            window.parent.showToast(message, type);
+        } else {
+            alert(message);
+        }
+    }
+</script>
+{% endblock %}
